@@ -3,8 +3,8 @@ name = "hr_customizations"
 authors = [
     { name = "Marwan", email = "marwanbadr514@gmail.com"}
 ]
-description = "Monthly worker attendance page and dashboard"
-requires-python = ">=3.14"
+description = "Daily and monthly worker attendance sheet with one-click marking, bulk marking and an attendance dashboard for ERPNext / HRMS (Frappe v16)"
+requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [

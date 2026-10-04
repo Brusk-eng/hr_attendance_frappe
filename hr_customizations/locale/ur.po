@@ -1,0 +1,289 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: hr_customizations\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ur\n"
+
+
+msgid "Absent"
+msgstr "غیر حاضر"
+
+msgid "All Employees"
+msgstr "تمام ملازمین"
+
+msgid "Already marked as {0}"
+msgstr "پہلے سے {0} درج ہے"
+
+msgid "Attendance"
+msgstr "حاضری"
+
+msgid "Attendance %"
+msgstr "حاضری %"
+
+msgid "Attendance Dashboard"
+msgstr "حاضری ڈیش بورڈ"
+
+msgid "Attendance Rate"
+msgstr "حاضری کی شرح"
+
+msgid "Attendance Sheet"
+msgstr "حاضری شیٹ"
+
+msgid "Attendance by Employee"
+msgstr "ملازم کے لحاظ سے حاضری"
+
+msgid "Attendance can not be marked for future dates"
+msgstr "مستقبل کی تاریخوں کے لیے حاضری درج نہیں کی جا سکتی"
+
+msgid "Attendance per Employee"
+msgstr "ہر ملازم کی حاضری"
+
+msgid "Attendance saved as draft"
+msgstr "حاضری مسودے کے طور پر محفوظ ہو گئی"
+
+msgid "Attendance submitted"
+msgstr "حاضری جمع ہو گئی"
+
+msgid "Bulk Mark"
+msgstr "اجتماعی اندراج"
+
+msgid "Bulk Mark Attendance"
+msgstr "اجتماعی حاضری درج کریں"
+
+msgid "Choosing a different status will cancel and amend it."
+msgstr "مختلف حالت منتخب کرنے سے یہ منسوخ ہو کر ترمیم ہو جائے گی۔"
+
+msgid "Click to mark attendance"
+msgstr "حاضری درج کرنے کے لیے کلک کریں"
+
+msgid "Daily Attendance"
+msgstr "روزانہ حاضری"
+
+msgid "Dashboard"
+msgstr "ڈیش بورڈ"
+
+msgid "Date"
+msgstr "تاریخ"
+
+msgid "Days"
+msgstr "دن"
+
+msgid "Days in Period"
+msgstr "مدت کے دن"
+
+msgid "Draft"
+msgstr "مسودہ"
+
+msgid "Employee"
+msgstr "ملازم"
+
+msgid "Employee name or ID"
+msgstr "ملازم کا نام یا آئی ڈی"
+
+msgid "Employees"
+msgstr "ملازمین"
+
+msgid "Failed"
+msgstr "ناکام"
+
+msgid "From Date"
+msgstr "تاریخ سے"
+
+msgid "From Date can not be after To Date"
+msgstr "شروع کی تاریخ آخری تاریخ کے بعد نہیں ہو سکتی"
+
+msgid "HR Customizations"
+msgstr "ایچ آر تخصیصات"
+
+msgid "Half Day"
+msgstr "آدھا دن"
+
+msgid "Invalid attendance status {0}"
+msgstr "غلط حاضری حالت {0}"
+
+msgid "Last 30 Days"
+msgstr "پچھلے 30 دن"
+
+msgid "Last Month"
+msgstr "پچھلا مہینہ"
+
+msgid "Leave"
+msgstr "چھٹی"
+
+msgid "Leave Type"
+msgstr "چھٹی کی قسم"
+
+msgid "Mark Attendance"
+msgstr "حاضری درج کریں"
+
+msgid "Marking attendance..."
+msgstr "حاضری درج ہو رہی ہے..."
+
+msgid "Marks every employee shown on this page ({0}) who is not yet marked on the selected date. Already marked employees are skipped."
+msgstr "اس صفحے پر موجود تمام ملازمین ({0}) جن کی منتخب تاریخ پر حاضری درج نہیں، ان کی حاضری درج ہو گی۔ پہلے سے درج ملازمین کو چھوڑ دیا جائے گا۔"
+
+msgid "Month"
+msgstr "مہینہ"
+
+msgid "Next"
+msgstr "اگلا"
+
+msgid "Next Month"
+msgstr "اگلا مہینہ"
+
+msgid "No active employees found"
+msgstr "کوئی فعال ملازم نہیں ملا"
+
+msgid "No employee matches {0}"
+msgstr "{0} سے کوئی ملازم نہیں ملا"
+
+msgid "No submitted attendance in this period"
+msgstr "اس مدت میں کوئی جمع شدہ حاضری نہیں"
+
+msgid "Not Marked"
+msgstr "درج نہیں"
+
+msgid "Number of days per status for each employee"
+msgstr "ہر ملازم کے لیے ہر حالت کے دنوں کی تعداد"
+
+msgid "On Leave"
+msgstr "چھٹی پر"
+
+msgid "One Employee"
+msgstr "ایک ملازم"
+
+msgid "Page {0} of {1}"
+msgstr "صفحہ {0} از {1}"
+
+msgid "Present"
+msgstr "حاضر"
+
+msgid "Previous"
+msgstr "پچھلا"
+
+msgid "Previous Month"
+msgstr "پچھلا مہینہ"
+
+msgid "Refresh"
+msgstr "تازہ کریں"
+
+msgid "Save as Draft"
+msgstr "مسودے کے طور پر محفوظ کریں"
+
+msgid "Search Employee"
+msgstr "ملازم تلاش کریں"
+
+msgid "Select an employee to see their attendance"
+msgstr "حاضری دیکھنے کے لیے ملازم منتخب کریں"
+
+msgid "Share of each attendance status in the period"
+msgstr "مدت میں ہر حاضری حالت کا تناسب"
+
+msgid "Showing {0} - {1} of {2} employees"
+msgstr "{2} میں سے {0} - {1} ملازمین دکھائے جا رہے ہیں"
+
+msgid "Status"
+msgstr "حالت"
+
+msgid "Status Distribution"
+msgstr "حالت کی تقسیم"
+
+msgid "Status recorded on each day of the period"
+msgstr "مدت کے ہر دن درج حالت"
+
+msgid "Submit Attendance"
+msgstr "حاضری جمع کریں"
+
+msgid "Submit Drafts"
+msgstr "مسودے جمع کریں"
+
+msgid "Submit Immediately"
+msgstr "فوراً جمع کریں"
+
+msgid "Submit {0} draft attendance record(s)?"
+msgstr "{0} مسودہ حاضری ریکارڈ جمع کریں؟"
+
+msgid "Submitted"
+msgstr "جمع شدہ"
+
+msgid "There are no draft attendance records on this page."
+msgstr "اس صفحے پر کوئی مسودہ حاضری ریکارڈ نہیں۔"
+
+msgid "This Month"
+msgstr "یہ مہینہ"
+
+msgid "To Date"
+msgstr "تاریخ تک"
+
+msgid "Today"
+msgstr "آج"
+
+msgid "Total"
+msgstr "کل"
+
+msgid "Total Workers"
+msgstr "کل مزدور"
+
+msgid "Total Working Days"
+msgstr "کل کام کے دن"
+
+msgid "Total records"
+msgstr "کل ریکارڈ"
+
+msgid "Total records: {0}"
+msgstr "کل ریکارڈ: {0}"
+
+msgid "Work From Home"
+msgstr "گھر سے کام"
+
+msgid "Worker Attendance"
+msgstr "مزدوروں کی حاضری"
+
+msgid "Year"
+msgstr "سال"
+
+msgid "first {0} shown, see the table below for all"
+msgstr "پہلے {0} دکھائے گئے، سب کے لیے نیچے جدول دیکھیں"
+
+msgid "of workers"
+msgstr "مزدوروں میں سے"
+
+msgid "{0} employee(s)"
+msgstr "{0} ملازمین"
+
+msgid "{0} marked, {1} already marked (skipped)."
+msgstr "{0} درج ہوئے، {1} پہلے سے درج تھے (چھوڑ دیے گئے)۔"
+
+msgid "{0} submitted"
+msgstr "{0} جمع ہو گئے"
+
+msgid "{0} working days"
+msgstr "{0} کام کے دن"
+
+msgctxt "Attendance Abbreviation"
+msgid "A"
+msgstr "غ"
+
+msgctxt "Attendance Abbreviation"
+msgid "H"
+msgstr "آ"
+
+msgctxt "Attendance Abbreviation"
+msgid "L"
+msgstr "چ"
+
+msgctxt "Attendance Abbreviation"
+msgid "P"
+msgstr "ح"
+
+msgctxt "Attendance Abbreviation"
+msgid "W"
+msgstr "گ"
+
+msgid "Attendance Page"
+msgstr "حاضری صفحہ"
+
+msgid "New Employee"
+msgstr "نیا ملازم"

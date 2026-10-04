@@ -1,0 +1,289 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: hr_customizations\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ar\n"
+
+
+msgid "Absent"
+msgstr "غائب"
+
+msgid "All Employees"
+msgstr "كل الموظفين"
+
+msgid "Already marked as {0}"
+msgstr "تم التسجيل مسبقاً كـ {0}"
+
+msgid "Attendance"
+msgstr "الحضور"
+
+msgid "Attendance %"
+msgstr "نسبة الحضور %"
+
+msgid "Attendance Dashboard"
+msgstr "لوحة متابعة الحضور"
+
+msgid "Attendance Rate"
+msgstr "معدل الحضور"
+
+msgid "Attendance Sheet"
+msgstr "كشف الحضور"
+
+msgid "Attendance by Employee"
+msgstr "الحضور حسب الموظف"
+
+msgid "Attendance can not be marked for future dates"
+msgstr "لا يمكن تسجيل الحضور لتواريخ مستقبلية"
+
+msgid "Attendance per Employee"
+msgstr "الحضور لكل موظف"
+
+msgid "Attendance saved as draft"
+msgstr "تم حفظ الحضور كمسودة"
+
+msgid "Attendance submitted"
+msgstr "تم اعتماد الحضور"
+
+msgid "Bulk Mark"
+msgstr "تسجيل جماعي"
+
+msgid "Bulk Mark Attendance"
+msgstr "تسجيل حضور جماعي"
+
+msgid "Choosing a different status will cancel and amend it."
+msgstr "اختيار حالة مختلفة سيقوم بإلغاء السجل وتعديله."
+
+msgid "Click to mark attendance"
+msgstr "اضغط لتسجيل الحضور"
+
+msgid "Daily Attendance"
+msgstr "الحضور اليومي"
+
+msgid "Dashboard"
+msgstr "لوحة المتابعة"
+
+msgid "Date"
+msgstr "التاريخ"
+
+msgid "Days"
+msgstr "الأيام"
+
+msgid "Days in Period"
+msgstr "أيام الفترة"
+
+msgid "Draft"
+msgstr "مسودة"
+
+msgid "Employee"
+msgstr "الموظف"
+
+msgid "Employee name or ID"
+msgstr "اسم الموظف أو الرقم"
+
+msgid "Employees"
+msgstr "الموظفون"
+
+msgid "Failed"
+msgstr "فشل"
+
+msgid "From Date"
+msgstr "من تاريخ"
+
+msgid "From Date can not be after To Date"
+msgstr "لا يمكن أن يكون (من تاريخ) بعد (إلى تاريخ)"
+
+msgid "HR Customizations"
+msgstr "تخصيصات الموارد البشرية"
+
+msgid "Half Day"
+msgstr "نصف يوم"
+
+msgid "Invalid attendance status {0}"
+msgstr "حالة حضور غير صالحة {0}"
+
+msgid "Last 30 Days"
+msgstr "آخر 30 يوم"
+
+msgid "Last Month"
+msgstr "الشهر الماضي"
+
+msgid "Leave"
+msgstr "إجازة"
+
+msgid "Leave Type"
+msgstr "نوع الإجازة"
+
+msgid "Mark Attendance"
+msgstr "تسجيل الحضور"
+
+msgid "Marking attendance..."
+msgstr "جاري تسجيل الحضور..."
+
+msgid "Marks every employee shown on this page ({0}) who is not yet marked on the selected date. Already marked employees are skipped."
+msgstr "يسجل كل الموظفين الظاهرين في هذه الصفحة ({0}) الذين لم يُسجل حضورهم في التاريخ المحدد. الموظفون المسجلون مسبقاً سيتم تخطيهم."
+
+msgid "Month"
+msgstr "الشهر"
+
+msgid "Next"
+msgstr "التالي"
+
+msgid "Next Month"
+msgstr "الشهر التالي"
+
+msgid "No active employees found"
+msgstr "لا يوجد موظفون نشطون"
+
+msgid "No employee matches {0}"
+msgstr "لا يوجد موظف يطابق {0}"
+
+msgid "No submitted attendance in this period"
+msgstr "لا يوجد حضور معتمد في هذه الفترة"
+
+msgid "Not Marked"
+msgstr "غير مسجل"
+
+msgid "Number of days per status for each employee"
+msgstr "عدد الأيام لكل حالة لكل موظف"
+
+msgid "On Leave"
+msgstr "في إجازة"
+
+msgid "One Employee"
+msgstr "موظف واحد"
+
+msgid "Page {0} of {1}"
+msgstr "صفحة {0} من {1}"
+
+msgid "Present"
+msgstr "حاضر"
+
+msgid "Previous"
+msgstr "السابق"
+
+msgid "Previous Month"
+msgstr "الشهر السابق"
+
+msgid "Refresh"
+msgstr "تحديث"
+
+msgid "Save as Draft"
+msgstr "حفظ كمسودة"
+
+msgid "Search Employee"
+msgstr "بحث عن موظف"
+
+msgid "Select an employee to see their attendance"
+msgstr "اختر موظفاً لعرض حضوره"
+
+msgid "Share of each attendance status in the period"
+msgstr "نسبة كل حالة حضور خلال الفترة"
+
+msgid "Showing {0} - {1} of {2} employees"
+msgstr "عرض {0} - {1} من {2} موظف"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Status Distribution"
+msgstr "توزيع الحالات"
+
+msgid "Status recorded on each day of the period"
+msgstr "الحالة المسجلة في كل يوم من الفترة"
+
+msgid "Submit Attendance"
+msgstr "اعتماد الحضور"
+
+msgid "Submit Drafts"
+msgstr "اعتماد المسودات"
+
+msgid "Submit Immediately"
+msgstr "اعتماد فوراً"
+
+msgid "Submit {0} draft attendance record(s)?"
+msgstr "اعتماد {0} من مسودات الحضور؟"
+
+msgid "Submitted"
+msgstr "معتمد"
+
+msgid "There are no draft attendance records on this page."
+msgstr "لا توجد مسودات حضور في هذه الصفحة."
+
+msgid "This Month"
+msgstr "هذا الشهر"
+
+msgid "To Date"
+msgstr "إلى تاريخ"
+
+msgid "Today"
+msgstr "اليوم"
+
+msgid "Total"
+msgstr "الإجمالي"
+
+msgid "Total Workers"
+msgstr "إجمالي العمال"
+
+msgid "Total Working Days"
+msgstr "إجمالي أيام العمل"
+
+msgid "Total records"
+msgstr "إجمالي السجلات"
+
+msgid "Total records: {0}"
+msgstr "إجمالي السجلات: {0}"
+
+msgid "Work From Home"
+msgstr "العمل من المنزل"
+
+msgid "Worker Attendance"
+msgstr "حضور العمال"
+
+msgid "Year"
+msgstr "السنة"
+
+msgid "first {0} shown, see the table below for all"
+msgstr "يتم عرض أول {0}، راجع الجدول بالأسفل للجميع"
+
+msgid "of workers"
+msgstr "من العمال"
+
+msgid "{0} employee(s)"
+msgstr "{0} موظف"
+
+msgid "{0} marked, {1} already marked (skipped)."
+msgstr "تم تسجيل {0}، و{1} مسجلون مسبقاً (تم تخطيهم)."
+
+msgid "{0} submitted"
+msgstr "تم اعتماد {0}"
+
+msgid "{0} working days"
+msgstr "{0} يوم عمل"
+
+msgctxt "Attendance Abbreviation"
+msgid "A"
+msgstr "غ"
+
+msgctxt "Attendance Abbreviation"
+msgid "H"
+msgstr "ن"
+
+msgctxt "Attendance Abbreviation"
+msgid "L"
+msgstr "إ"
+
+msgctxt "Attendance Abbreviation"
+msgid "P"
+msgstr "ح"
+
+msgctxt "Attendance Abbreviation"
+msgid "W"
+msgstr "م"
+
+msgid "Attendance Page"
+msgstr "صفحة الحضور"
+
+msgid "New Employee"
+msgstr "موظف جديد"

@@ -1,14 +1,14 @@
 app_name = "hr_customizations"
 app_title = "HR Customizations"
 app_publisher = "Marwan"
-app_description = "Monthly worker attendance page and dashboard"
+app_description = "Daily and monthly worker attendance sheet with one-click marking, bulk marking and an attendance dashboard for ERPNext / HRMS (Frappe v16)"
 app_email = "marwanbadr514@gmail.com"
 app_license = "mit"
 
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["hrms"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -262,3 +262,5 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+
+after_migrate = ["hr_customizations.api.add_indexes"]
