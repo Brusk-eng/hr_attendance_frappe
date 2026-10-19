@@ -86,7 +86,7 @@ required_apps = ["hrms"]
 # ------------
 
 # before_install = "hr_customizations.install.before_install"
-# after_install = "hr_customizations.install.after_install"
+after_install = "hr_customizations.setup.after_install"
 
 # Uninstallation
 # ------------
@@ -263,4 +263,4 @@ required_apps = ["hrms"]
 # ignore_translatable_strings_from = []
 
 
-after_migrate = ["hr_customizations.api.add_indexes"]
+after_migrate = ["hr_customizations.setup.after_migrate"]
