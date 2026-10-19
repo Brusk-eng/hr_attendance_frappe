@@ -46,6 +46,13 @@
 .emppage .sheet-head .title { font-weight: 600; font-size: 14px; }
 .emppage .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-muted); align-items: center; }
 .emppage .legend .chip { width: 22px; height: 20px; font-size: 11px; }
+.emppage .att-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 14px; background: var(--subtle-accent, var(--bg-color)); border-bottom: 1px solid var(--border-color); font-size: 13px; }
+.emppage .att-selection-bar.hidden { display: none; }
+.emppage .att-selection-bar .sel-count { font-weight: 700; color: var(--primary); }
+.emppage .att-grid .row-check { margin: 0 4px 0 0; vertical-align: middle; cursor: pointer; accent-color: var(--primary); }
+.emppage .att-grid td.day.selected { background: color-mix(in srgb, var(--primary) 18%, transparent) !important; box-shadow: inset 0 0 0 2px var(--primary); }
+.emppage .att-grid td.day.selected .chip.empty { border-color: var(--primary); background: var(--primary); opacity: .25; }
+.emppage.is-painting, .emppage.is-painting .att-grid { user-select: none; cursor: crosshair; }
 .emppage .att-scroll { overflow: auto; max-height: calc(100vh - 380px); min-height: 240px; }
 .emppage table.att-grid { border-collapse: separate; border-spacing: 0; font-size: 12px; width: max-content; min-width: 100%; }
 .emppage .att-grid th, .emppage .att-grid td { border-bottom: 1px solid var(--border-color); padding: 5px 3px; text-align: center; white-space: nowrap; background: var(--card-bg); }
@@ -58,14 +65,16 @@
 .emppage .att-grid .col-emp { position: sticky; left: 0; z-index: 1; text-align: start; min-width: 230px; padding: 6px 12px; border-inline-end: 1px solid var(--border-color); }
 [dir="rtl"] .emppage .att-grid .col-emp { left: auto; right: 0; }
 .emppage .att-grid thead .col-emp { z-index: 3; }
-.emppage .emp-cell { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.emppage .emp-cell { display: flex; gap: 10px; align-items: center; }
+.emppage .emp-cell .emp-open { display: flex; gap: 10px; align-items: center; cursor: pointer; flex: 1; min-width: 0; }
 .emppage .emp-cell .avatar { flex-shrink: 0; }
 .emppage .emp-cell .nm { font-weight: 600; color: var(--text-color); font-size: 13px; }
-.emppage .emp-cell:hover .nm { color: var(--primary); }
+.emppage .emp-cell .emp-open:hover .nm { color: var(--primary); }
 .emppage .emp-cell .id { color: var(--text-muted); font-size: 11px; }
 .emppage td.day { cursor: pointer; padding: 4px 2px; }
 .emppage td.day.future { cursor: not-allowed; opacity: .45; }
 .emppage .chip { display: inline-grid; place-items: center; width: 26px; height: 24px; border-radius: 6px; font-weight: 700; font-size: 11px; transition: transform .1s; }
+.emppage .chip.loc { width: auto; min-width: 28px; padding: 0 3px; font-size: 9px; letter-spacing: -0.02em; }
 .emppage td.day:not(.future):hover .chip { transform: scale(1.12); box-shadow: 0 0 0 2px var(--primary); }
 .emppage .chip.empty { background: transparent; border: 1px dashed var(--border-color); }
 .emppage .chip.draft { border: 1.5px dashed currentColor; opacity: .75; }

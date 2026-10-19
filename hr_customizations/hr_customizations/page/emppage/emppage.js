@@ -4,6 +4,13 @@
 
 const API = "hr_customizations.api";
 const MARK_STATUSES = ["Present", "Absent", "On Leave"];
+const LOCATION_STATUSES = ["Present", "Half Day", "Work From Home"];
+const EMPLOYMENT_TYPE_LOCATION_OPTIONS = ["Office", "Site Location", "Base"];
+const LOCATION_ABBR = {
+	Office: "P-O",
+	"Site Location": "P-S",
+	Base: "P-B",
+};
 const STATUS_META = {
 	Present: { abbr: "P", cls: "c-present", color: "#16a34a" },
 	Absent: { abbr: "A", cls: "c-absent", color: "#dc2626" },
@@ -14,6 +21,20 @@ const STATUS_META = {
 const status_color = (s) => STATUS_META[s].color;
 const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
 const abbr = (s) => __(STATUS_META[s]?.abbr || "?", null, "Attendance Abbreviation");
+const cell_label = (status, location) => {
+	if (status === "Present" && location && LOCATION_ABBR[location]) {
+		return LOCATION_ABBR[location];
+	}
+	return abbr(status);
+};
+const cell_title = (status, location, is_draft) => {
+	let t = __(status);
+	if (status === "Present" && location) {
+		t = `${__("Present")} · ${__(location)}`;
+	}
+	if (is_draft) t += ` (${__("Draft")})`;
+	return t;
+};
 
 frappe.pages["emppage"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
@@ -102,8 +123,112 @@ class AttendanceSheet {
 		this.month = now.month() + 1;
 		this.start = 0;
 		this.search = "";
+		/** @type {Set<string>} keys: `${employee}::${yyyy-mm-dd}` */
+		this.selected = new Set();
+		this._painting = false;
+		this._paint_on = true;
+		this._did_paint = false;
+		this._suppress_click = false;
+		this._paint_start = null;
+		$(document).on("mouseup.emppageSel", () => this.end_paint());
 		this.make();
 		this.refresh();
+	}
+
+	cell_key(employee, date) {
+		return `${employee}::${date}`;
+	}
+
+	parse_cell_key(key) {
+		const i = key.indexOf("::");
+		return { employee: key.slice(0, i), attendance_date: key.slice(i + 2) };
+	}
+
+	clear_selection() {
+		this.selected.clear();
+		this.$wrapper.find("td.day.selected").removeClass("selected");
+		this.$wrapper.find(".row-check").prop("checked", false).prop("indeterminate", false);
+		this.update_selection_bar();
+	}
+
+	update_selection_bar() {
+		const n = this.selected.size;
+		const $bar = this.$wrapper.find(".att-selection-bar");
+		if (!$bar.length) return;
+		$bar.toggleClass("hidden", n === 0);
+		$bar.find(".sel-count").text(__("{0} day(s) selected", [n]));
+	}
+
+	selectable_dates_for_employee(emp) {
+		const today = frappe.datetime.get_today();
+		const days = this.data?.days_in_month || 0;
+		const dates = [];
+		for (let d = 1; d <= days; d++) {
+			const ds = this.date_str(d);
+			if (ds > today) continue;
+			dates.push(ds);
+		}
+		return dates;
+	}
+
+	find_day_cell(employee, date) {
+		return this.$wrapper
+			.find("tr")
+			.filter((_, el) => el.getAttribute("data-employee") === employee)
+			.find(`td.day[data-date="${date}"]`);
+	}
+
+	set_cell_selected(employee, date, on) {
+		if (!employee || !date || date > frappe.datetime.get_today()) return;
+		const key = this.cell_key(employee, date);
+		if (on) this.selected.add(key);
+		else this.selected.delete(key);
+		this.find_day_cell(employee, date).toggleClass("selected", on);
+	}
+
+	set_row_selection(employee, checked) {
+		const emp = (this.data?.employees || []).find((e) => e.name === employee);
+		if (!emp) return;
+		this.selectable_dates_for_employee(emp).forEach((ds) => {
+			this.set_cell_selected(employee, ds, checked);
+		});
+		this.update_selection_bar();
+	}
+
+	sync_row_checks() {
+		(this.data?.employees || []).forEach((emp) => {
+			const dates = this.selectable_dates_for_employee(emp);
+			const n = dates.filter((ds) => this.selected.has(this.cell_key(emp.name, ds))).length;
+			const $cb = this.$wrapper
+				.find("tr")
+				.filter((_, el) => el.getAttribute("data-employee") === emp.name)
+				.find(".row-check");
+			$cb.prop("checked", n > 0 && n === dates.length);
+			$cb.prop("indeterminate", n > 0 && n < dates.length);
+		});
+	}
+
+	end_paint() {
+		if (!this._painting) return;
+		this._painting = false;
+		this.$wrapper.removeClass("is-painting");
+		if (this._did_paint) {
+			this._suppress_click = true;
+			this.sync_row_checks();
+			this.update_selection_bar();
+			// drop suppress if click never fires (mouseup outside cell)
+			setTimeout(() => {
+				this._suppress_click = false;
+			}, 0);
+		}
+		this._did_paint = false;
+		this._paint_start = null;
+	}
+
+	paint_cell($td) {
+		const employee = $td.closest("tr").attr("data-employee");
+		const date = $td.attr("data-date");
+		this.set_cell_selected(employee, date, this._paint_on);
 	}
 
 	make() {
@@ -115,14 +240,25 @@ class AttendanceSheet {
 					<div class="title"></div>
 					<div class="legend">
 						${MARK_STATUSES.map((s) => `<span><span class="chip ${STATUS_META[s].cls}">${abbr(s)}</span> ${__(s)}</span>`).join("")}
+						<span><span class="chip c-present loc">P-O</span> ${__("Present")} · ${__("Office")}</span>
+						<span><span class="chip c-present loc">P-S</span> ${__("Present")} · ${__("Site")}</span>
+						<span><span class="chip c-present loc">P-B</span> ${__("Present")} · ${__("Base")}</span>
 						<span><span class="chip c-present draft">${abbr("Present")}</span> ${__("Draft")}</span>
 						<span><span class="chip empty"></span> ${__("Not Marked")}</span>
 					</div>
+				</div>
+				<div class="att-selection-bar hidden">
+					<span class="sel-count">0</span>
+					<span class="text-muted">${__("Hold & drag across days to select · employee checkbox for whole row")}</span>
+					<button type="button" class="btn btn-default btn-sm btn-clear-sel">${__("Clear")}</button>
+					<button type="button" class="btn btn-primary btn-sm btn-mark-sel">${__("Mark Selected")}</button>
 				</div>
 				<div class="att-scroll"></div>
 				<div class="att-pager"></div>
 			</div>
 		`);
+		this.$wrapper.find(".btn-clear-sel").on("click", () => this.clear_selection());
+		this.$wrapper.find(".btn-mark-sel").on("click", () => this.bulk_dialog({ use_selection: true }));
 		const $f = this.$wrapper.find(".att-filters");
 
 		const $nav = $(`<div class="month-nav">
@@ -199,6 +335,7 @@ class AttendanceSheet {
 	}
 
 	refresh() {
+		this.clear_selection();
 		this.$wrapper.find(".att-scroll").css("opacity", 0.5);
 		return frappe
 			.call(`${API}.get_monthly_attendance`, {
@@ -235,10 +372,15 @@ class AttendanceSheet {
 			return;
 		}
 
-		let head = `<th class="col-emp">${__("Employee")}</th>`;
+		let head = `<th class="col-emp"><span title="${__(
+			"Tick employee = select all days in that row"
+		)}">${__("Employee")}</span></th>`;
 		for (let d = 1; d <= days_in_month; d++) {
 			const ds = this.date_str(d);
-			head += `<th class="${ds === today ? "today" : ""}" title="${esc(frappe.datetime.str_to_user(ds))}">
+			const future = ds > today;
+			head += `<th class="${ds === today ? "today" : ""}${future ? " future" : ""}" data-date="${ds}" title="${esc(
+				frappe.datetime.str_to_user(ds)
+			)}">
 				<span class="dnum">${d}</span><br><small>${esc(moment(ds).format("dd"))}</small></th>`;
 		}
 		head += `
@@ -256,24 +398,34 @@ class AttendanceSheet {
 					const ds = this.date_str(d);
 					const a = emp.attendance[ds];
 					const future = ds > today;
+					const is_sel = this.selected.has(this.cell_key(emp.name, ds));
 					let chip = `<span class="chip empty"></span>`;
 					let title = frappe.datetime.str_to_user(ds);
 					if (a) {
 						const meta = STATUS_META[a.status] || { cls: "c-none" };
-						chip = `<span class="chip ${meta.cls}${a.docstatus === 0 ? " draft" : ""}">${abbr(a.status)}</span>`;
-						title += ` · ${__(a.status)}` + (a.docstatus === 0 ? ` (${__("Draft")})` : "");
+						const loc = a.employment_type_location;
+						const label = cell_label(a.status, loc);
+						const loc_cls = a.status === "Present" && loc ? " loc" : "";
+						chip = `<span class="chip ${meta.cls}${loc_cls}${a.docstatus === 0 ? " draft" : ""}">${esc(label)}</span>`;
+						title += ` · ${cell_title(a.status, loc, a.docstatus === 0)}`;
 					} else if (!future) {
 						title += ` · ${__("Not Marked")}`;
 					}
-					cells += `<td class="day${future ? " future" : ""}${ds === today ? " today-col" : ""}" data-date="${ds}" title="${esc(title)}">${future && !a ? "" : chip}</td>`;
+					if (!future) title += ` · ${__("Hold & drag to select · click to mark")}`;
+					cells += `<td class="day${future ? " future" : ""}${ds === today ? " today-col" : ""}${
+						is_sel ? " selected" : ""
+					}" data-date="${ds}" title="${esc(title)}">${future && !a ? "" : chip}</td>`;
 				}
 				const t = emp.totals;
 				const rate = t.working_days ? Math.round((t.present * 100) / t.working_days) : 0;
 				return `<tr data-employee="${esc(emp.name)}">
-					<td class="col-emp"><div class="emp-cell" title="${__("Click to mark attendance")}">
+					<td class="col-emp"><div class="emp-cell">
+						<input type="checkbox" class="row-check" title="${__("Select all days for this employee")}">
+						<div class="emp-open" title="${__("Click to mark attendance")}">
 						${avatar(emp.employee_name || emp.name)}
 						<div><div class="nm">${esc(emp.employee_name || emp.name)}</div>
 						<div class="id">${esc(emp.name)}${emp.designation ? " · " + esc(__(emp.designation)) : ""}</div></div>
+						</div>
 					</div></td>
 					${cells}
 					<td class="tot first">${t.working_days}</td>
@@ -289,13 +441,50 @@ class AttendanceSheet {
 		$scroll.html(`<table class="att-grid"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`);
 
 		const default_date = today.slice(0, 7) === this.date_str(1).slice(0, 7) ? today : null;
-		$scroll.find(".emp-cell").on("click", (e) => {
+		$scroll.find(".emp-open").on("click", (e) => {
 			this.open_dialog($(e.currentTarget).closest("tr").attr("data-employee"), default_date || today);
 		});
-		$scroll.find("td.day:not(.future)").on("click", (e) => {
+		$scroll.find(".row-check").on("click", (e) => {
+			e.stopPropagation();
+			const emp = $(e.currentTarget).closest("tr").attr("data-employee");
+			this.set_row_selection(emp, e.currentTarget.checked);
+		});
+		const $days = $scroll.find("td.day:not(.future)");
+		$days.on("mousedown", (e) => {
+			if (e.button !== 0) return;
+			e.preventDefault();
+			const $td = $(e.currentTarget);
+			const emp = $td.closest("tr").attr("data-employee");
+			const date = $td.attr("data-date");
+			this._painting = true;
+			this._did_paint = false;
+			this._paint_start = { employee: emp, date, $td };
+			this._paint_on = !this.selected.has(this.cell_key(emp, date));
+			this.$wrapper.addClass("is-painting");
+		});
+		$days.on("mouseenter", (e) => {
+			if (!this._painting) return;
+			const $td = $(e.currentTarget);
+			if (!this._did_paint && this._paint_start) {
+				this._did_paint = true;
+				this.paint_cell(this._paint_start.$td);
+			}
+			this._did_paint = true;
+			this.paint_cell($td);
+		});
+		$days.on("click", (e) => {
+			if (this._suppress_click) {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				this._suppress_click = false;
+				return;
+			}
 			const $td = $(e.currentTarget);
 			this.open_dialog($td.closest("tr").attr("data-employee"), $td.attr("data-date"));
 		});
+
+		this.sync_row_checks();
+		this.update_selection_bar();
 
 		// scroll today's column into view
 		const $today = $scroll.find("th.today");
@@ -367,6 +556,17 @@ class AttendanceSheet {
 				},
 				{ fieldname: "status_html", fieldtype: "HTML", label: __("Status") },
 				{
+					fieldname: "employment_type_location",
+					fieldtype: "Select",
+					label: __("Employment Type Location"),
+					options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
+					default: "Base",
+					description: __(
+						"Required for Present. Used for Salary Slip day calculation when TRS is installed."
+					),
+					hidden: 0,
+				},
+				{
 					fieldname: "leave_type",
 					fieldtype: "Link",
 					label: __("Leave Type"),
@@ -404,6 +604,14 @@ class AttendanceSheet {
 			$picker.find("button").removeClass("active").filter(`[data-status="${s}"]`).addClass("active");
 			d.set_df_property("leave_type", "hidden", s !== "On Leave");
 			d.set_df_property("leave_type", "reqd", s === "On Leave");
+			const needs_location = LOCATION_STATUSES.includes(s);
+			d.set_df_property("employment_type_location", "hidden", needs_location ? 0 : 1);
+			d.set_df_property("employment_type_location", "reqd", needs_location ? 1 : 0);
+			if (!needs_location) {
+				d.set_value("employment_type_location", "");
+			} else if (!d.get_value("employment_type_location")) {
+				d.set_value("employment_type_location", "Base");
+			}
 		};
 		$picker.on("click", "button", (e) => set_status($(e.currentTarget).attr("data-status")));
 
@@ -411,10 +619,17 @@ class AttendanceSheet {
 			const ds = d.get_value("attendance_date");
 			const a = ds && emp.attendance[ds];
 			set_status(a && MARK_STATUSES.includes(a.status) ? a.status : "Present");
+			if (a?.employment_type_location) {
+				d.set_value("employment_type_location", a.employment_type_location);
+			}
+			const loc_txt =
+				a?.status === "Present" && a.employment_type_location
+					? ` · ${__(a.employment_type_location)}`
+					: "";
 			d.fields_dict.existing_html.$wrapper.html(
 				a
 					? `<div class="att-existing">${frappe.utils.icon("info", "sm")}
-						${__("Already marked as {0}", [`<b>${__(a.status)}</b>`])}
+						${__("Already marked as {0}", [`<b>${__(a.status)}${esc(loc_txt)}</b>`])}
 						(${a.docstatus === 0 ? __("Draft") : __("Submitted")}) ·
 						<a href="${frappe.utils.get_form_link("Attendance", a.name)}" target="_blank">${esc(a.name)}</a>
 						${a.docstatus === 1 ? `<br>${__("Choosing a different status will cancel and amend it.")}` : ""}</div>`
@@ -427,6 +642,16 @@ class AttendanceSheet {
 				frappe.msgprint(__("Attendance can not be marked for future dates"));
 				return;
 			}
+			if (LOCATION_STATUSES.includes(status) && !values.employment_type_location) {
+				frappe.msgprint({
+					title: __("Employment Type Location Required"),
+					indicator: "red",
+					message: __(
+						"Employment Type Location is required when Status is Present. Please select Office, Site Location, or Base."
+					),
+				});
+				return;
+			}
 			frappe
 				.call({
 					method: `${API}.mark_attendance`,
@@ -435,6 +660,7 @@ class AttendanceSheet {
 						attendance_date: values.attendance_date,
 						status,
 						leave_type: values.leave_type,
+						employment_type_location: values.employment_type_location || null,
 						submit,
 					},
 					freeze: true,
@@ -459,49 +685,109 @@ class AttendanceSheet {
 		});
 	}
 
-	bulk_dialog() {
+	bulk_dialog(opts = {}) {
+		const use_selection = opts.use_selection || this.selected.size > 0;
 		const employees = (this.data?.employees || []).map((e) => e.name);
-		if (!employees.length) return;
+		if (!use_selection && !employees.length) return;
+		if (use_selection && !this.selected.size) {
+			frappe.msgprint(
+				__("Hold & drag across days (or use the employee checkbox), then Mark Selected.")
+			);
+			return;
+		}
 		const today = frappe.datetime.get_today();
+		const selected_cells = [...this.selected].map((k) => this.parse_cell_key(k));
+		const fields = [
+			{
+				fieldtype: "HTML",
+				options: use_selection
+					? `<div class="att-existing">${__(
+							"Will mark {0} selected employee-day cell(s). Already marked cells are skipped.",
+							[selected_cells.length]
+					  )}</div>`
+					: `<div class="att-existing">${__(
+							"Marks every employee shown on this page ({0}) who is not yet marked on the selected date. Already marked employees are skipped. Tip: hold & drag on the sheet to select cells for multi-day bulk mark.",
+							[employees.length]
+					  )}</div>`,
+			},
+		];
+		if (!use_selection) {
+			fields.push({
+				fieldname: "attendance_date",
+				fieldtype: "Date",
+				label: __("Date"),
+				reqd: 1,
+				default: today,
+				max_date: frappe.datetime.str_to_obj(today),
+			});
+		}
+		fields.push(
+			{
+				fieldname: "status",
+				fieldtype: "Select",
+				label: __("Status"),
+				reqd: 1,
+				options: MARK_STATUSES.map((s) => ({ label: __(s), value: s })),
+				default: "Present",
+			},
+			{
+				fieldname: "employment_type_location",
+				fieldtype: "Select",
+				label: __("Employment Type Location"),
+				options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
+				default: "Base",
+				depends_on: "eval:doc.status=='Present'",
+				mandatory_depends_on: "eval:doc.status=='Present'",
+				description: __(
+					"Required for Present. Used for Salary Slip day calculation when TRS is installed."
+				),
+			},
+			{
+				fieldname: "leave_type",
+				fieldtype: "Link",
+				label: __("Leave Type"),
+				options: "Leave Type",
+				default: "Leave Without Pay",
+				depends_on: "eval:doc.status=='On Leave'",
+				mandatory_depends_on: "eval:doc.status=='On Leave'",
+			},
+			{ fieldname: "submit", fieldtype: "Check", label: __("Submit Immediately"), default: 1 }
+		);
+
 		const d = new frappe.ui.Dialog({
 			title: __("Bulk Mark Attendance"),
-			fields: [
-				{
-					fieldtype: "HTML",
-					options: `<div class="att-existing">${__(
-						"Marks every employee shown on this page ({0}) who is not yet marked on the selected date. Already marked employees are skipped.",
-						[employees.length]
-					)}</div>`,
-				},
-				{
-					fieldname: "attendance_date",
-					fieldtype: "Date",
-					label: __("Date"),
-					reqd: 1,
-					default: today,
-					max_date: frappe.datetime.str_to_obj(today),
-				},
-				{
-					fieldname: "status",
-					fieldtype: "Select",
-					label: __("Status"),
-					reqd: 1,
-					options: MARK_STATUSES.map((s) => ({ label: __(s), value: s })),
-					default: "Present",
-				},
-				{
-					fieldname: "leave_type",
-					fieldtype: "Link",
-					label: __("Leave Type"),
-					options: "Leave Type",
-					default: "Leave Without Pay",
-					depends_on: "eval:doc.status=='On Leave'",
-					mandatory_depends_on: "eval:doc.status=='On Leave'",
-				},
-				{ fieldname: "submit", fieldtype: "Check", label: __("Submit Immediately"), default: 1 },
-			],
+			fields,
 			primary_action_label: __("Mark Attendance"),
 			primary_action: (v) => {
+				const finish = (r) => {
+					d.hide();
+					const { marked, skipped, failed } = r.message;
+					frappe.msgprint({
+						title: __("Bulk Mark Attendance"),
+						indicator: failed.length ? "orange" : "green",
+						message:
+							__("{0} marked, {1} already marked (skipped).", [marked, skipped]) +
+							(failed.length ? `<br>${__("Failed")}: ${failed.map(esc).join(", ")}` : ""),
+					});
+					this.refresh();
+				};
+				if (use_selection) {
+					frappe
+						.call({
+							method: `${API}.mark_selected_attendance`,
+							args: {
+								cells: selected_cells,
+								status: v.status,
+								leave_type: v.leave_type,
+								employment_type_location: v.employment_type_location || null,
+								submit: v.submit,
+							},
+							freeze: true,
+							freeze_message: __("Marking attendance..."),
+						})
+						.then(finish);
+					return;
+				}
 				if (v.attendance_date > today) {
 					frappe.msgprint(__("Attendance can not be marked for future dates"));
 					return;
@@ -509,22 +795,18 @@ class AttendanceSheet {
 				frappe
 					.call({
 						method: `${API}.mark_bulk_attendance`,
-						args: { employees, ...v },
+						args: {
+							employees,
+							attendance_date: v.attendance_date,
+							status: v.status,
+							leave_type: v.leave_type,
+							employment_type_location: v.employment_type_location || null,
+							submit: v.submit,
+						},
 						freeze: true,
 						freeze_message: __("Marking attendance..."),
 					})
-					.then((r) => {
-						d.hide();
-						const { marked, skipped, failed } = r.message;
-						frappe.msgprint({
-							title: __("Bulk Mark Attendance"),
-							indicator: failed.length ? "orange" : "green",
-							message:
-								__("{0} marked, {1} already marked (skipped).", [marked, skipped]) +
-								(failed.length ? `<br>${__("Failed")}: ${failed.map(esc).join(", ")}` : ""),
-						});
-						this.refresh();
-					});
+					.then(finish);
 			},
 		});
 		d.show();

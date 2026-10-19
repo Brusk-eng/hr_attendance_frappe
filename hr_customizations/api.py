@@ -45,6 +45,9 @@ def get_monthly_attendance(year, month, search=None, start=0):
 
 	attendance = {}
 	if employees:
+		att_fields = ["name", "employee", "attendance_date", "status", "docstatus"]
+		if _has_employment_type_location_field():
+			att_fields.append("custom_employment_type_location")
 		rows = frappe.get_list(
 			"Attendance",
 			filters={
@@ -52,7 +55,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 				"attendance_date": ["between", [from_date, to_date]],
 				"docstatus": ["<", 2],
 			},
-			fields=["name", "employee", "attendance_date", "status", "docstatus"],
+			fields=att_fields,
 			limit_page_length=0,
 		)
 		for r in rows:
@@ -60,6 +63,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 				"name": r.name,
 				"status": r.status,
 				"docstatus": r.docstatus,
+				"employment_type_location": r.get("custom_employment_type_location") or None,
 			}
 
 	# Workers have no weekends: every day of the month counts, up to today for the current month.
@@ -105,8 +109,38 @@ def get_monthly_attendance(year, month, search=None, start=0):
 	}
 
 
+LOCATION_STATUSES = ("Present", "Half Day", "Work From Home")
+LOCATION_OPTIONS = ("Office", "Site Location", "Base")
+
+
+def _has_employment_type_location_field():
+	return frappe.get_meta("Attendance").has_field("custom_employment_type_location")
+
+
+def _apply_employment_type_location(doc, status, employment_type_location=None):
+	"""Set Galiska TRS location field when Present (or clear it otherwise)."""
+	if not _has_employment_type_location_field():
+		return
+	if status in LOCATION_STATUSES:
+		if not employment_type_location:
+			frappe.throw(
+				_(
+					"Employment Type Location is required when Status is {0}. "
+					"Please select Office, Site Location, or Base."
+				).format(frappe.bold(status)),
+				title=_("Employment Type Location Required"),
+			)
+		if employment_type_location not in LOCATION_OPTIONS:
+			frappe.throw(_("Invalid Employment Type Location {0}").format(employment_type_location))
+		doc.custom_employment_type_location = employment_type_location
+	else:
+		doc.custom_employment_type_location = ""
+
+
 @frappe.whitelist()
-def mark_attendance(employee, attendance_date, status, submit=1, leave_type=None):
+def mark_attendance(
+	employee, attendance_date, status, submit=1, leave_type=None, employment_type_location=None
+):
 	"""Create (or update) the Attendance of an employee for one day."""
 	if status not in STATUSES:
 		frappe.throw(_("Invalid attendance status {0}").format(status))
@@ -143,6 +177,7 @@ def mark_attendance(employee, attendance_date, status, submit=1, leave_type=None
 
 	doc.status = status
 	doc.leave_type = (leave_type or "Leave Without Pay") if status == "On Leave" else None
+	_apply_employment_type_location(doc, status, employment_type_location)
 	doc.save()
 	if submit:
 		doc.submit()
@@ -150,7 +185,9 @@ def mark_attendance(employee, attendance_date, status, submit=1, leave_type=None
 
 
 @frappe.whitelist()
-def mark_bulk_attendance(employees, attendance_date, status, submit=1, leave_type=None):
+def mark_bulk_attendance(
+	employees, attendance_date, status, submit=1, leave_type=None, employment_type_location=None
+):
 	"""Mark the same status for several employees who are not yet marked on that date."""
 	employees = frappe.parse_json(employees) or []
 	already = set(
@@ -170,12 +207,59 @@ def mark_bulk_attendance(employees, attendance_date, status, submit=1, leave_typ
 		if employee in already:
 			continue
 		try:
-			mark_attendance(employee, attendance_date, status, submit, leave_type)
+			mark_attendance(
+				employee,
+				attendance_date,
+				status,
+				submit,
+				leave_type,
+				employment_type_location=employment_type_location,
+			)
 			marked += 1
 		except Exception:
 			frappe.clear_last_message()
 			failed.append(employee)
 	return {"marked": marked, "skipped": len(already), "failed": failed}
+
+
+@frappe.whitelist()
+def mark_selected_attendance(
+	cells, status, submit=1, leave_type=None, employment_type_location=None
+):
+	"""Mark attendance for specific employee+date cells selected on the sheet."""
+	cells = frappe.parse_json(cells) or []
+	if not cells:
+		frappe.throw(_("Please select at least one day cell."))
+	if status not in STATUSES:
+		frappe.throw(_("Invalid attendance status {0}").format(status))
+
+	marked, skipped, failed = 0, 0, []
+	for cell in cells:
+		employee = cell.get("employee")
+		attendance_date = cell.get("attendance_date")
+		if not employee or not attendance_date:
+			continue
+		existing = frappe.db.exists(
+			"Attendance",
+			{"employee": employee, "attendance_date": getdate(attendance_date), "docstatus": ["<", 2]},
+		)
+		if existing:
+			skipped += 1
+			continue
+		try:
+			mark_attendance(
+				employee,
+				attendance_date,
+				status,
+				submit,
+				leave_type,
+				employment_type_location=employment_type_location,
+			)
+			marked += 1
+		except Exception:
+			frappe.clear_last_message()
+			failed.append(f"{employee} @ {attendance_date}")
+	return {"marked": marked, "skipped": skipped, "failed": failed}
 
 
 @frappe.whitelist()
