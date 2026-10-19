@@ -123,13 +123,24 @@ def get_monthly_attendance(year, month, search=None, start=0):
 			else:
 				emp_working_days += 1
 			d = add_days(d, 1)
+		def _loc_count(loc):
+			return sum(
+				1
+				for m in marks.values()
+				if m["status"] == "Present" and (m.get("employment_type_location") or "") == loc
+			)
+
 		e.totals = {
 			"working_days": emp_working_days,
 			"holidays": off_days,
 			"present": sum(1 for m in marks.values() if m["status"] in ("Present", "Work From Home")),
+			"present_office": _loc_count("Office"),
+			"present_site": _loc_count("Site Location"),
+			"present_base": _loc_count("Base"),
 			"absent": sum(1 for m in marks.values() if m["status"] == "Absent"),
 			"leave": sum(1 for m in marks.values() if m["status"] == "On Leave"),
 			"half_day": sum(1 for m in marks.values() if m["status"] == "Half Day"),
+			"wfh": sum(1 for m in marks.values() if m["status"] == "Work From Home"),
 			"draft": sum(1 for m in marks.values() if m["docstatus"] == 0),
 		}
 		# Unmarked = working days with no Attendance record (H/WO days are not unmarked).
@@ -156,6 +167,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 	# KPI cards: today's status (or the last day of a past month) for all matching employees.
 	focus_date = min(to_date, max(from_date, getdate(today())))
 	day_counts = {}
+	day_location_counts = {"Office": 0, "Site Location": 0, "Base": 0}
 	if total:
 		for r in frappe.get_list(
 			"Attendance",
@@ -164,10 +176,26 @@ def get_monthly_attendance(year, month, search=None, start=0):
 			group_by="status",
 		):
 			day_counts[r.status] = r.count
+		if _has_employment_type_location_field():
+			for r in frappe.get_list(
+				"Attendance",
+				filters={
+					"employee": ["in", emp_names],
+					"attendance_date": focus_date,
+					"status": "Present",
+					"docstatus": ["<", 2],
+				},
+				fields=["custom_employment_type_location", {"COUNT": "*", "as": "count"}],
+				group_by="custom_employment_type_location",
+			):
+				loc = (r.get("custom_employment_type_location") or "").strip()
+				if loc in day_location_counts:
+					day_location_counts[loc] = r.count
 
 	return {
 		"focus_date": focus_date,
 		"day_counts": day_counts,
+		"day_location_counts": day_location_counts,
 		"employees": employees,
 		"total": total,
 		"page_length": PAGE_LENGTH,
@@ -391,14 +419,40 @@ def get_attendance_summary(from_date, to_date, employee=None):
 	)
 
 	all_statuses = ["Present", "Absent", "On Leave", "Half Day", "Work From Home"]
+	location_keys = list(LOCATION_OPTIONS)  # Office, Site Location, Base
 	totals = dict.fromkeys(all_statuses, 0)
+	location_totals = dict.fromkeys(location_keys, 0)
 	per_employee = {}
 	for r in rows:
 		totals[r.status] = totals.get(r.status, 0) + r.count
 		emp = per_employee.setdefault(
-			r.employee, {"employee": r.employee, "employee_name": r.employee_name, **dict.fromkeys(all_statuses, 0)}
+			r.employee,
+			{
+				"employee": r.employee,
+				"employee_name": r.employee_name,
+				**dict.fromkeys(all_statuses, 0),
+				**dict.fromkeys(location_keys, 0),
+			},
 		)
 		emp[r.status] = emp.get(r.status, 0) + r.count
+
+	# Present days split by Employment Type Location (P-O / P-S / P-B).
+	if _has_employment_type_location_field():
+		loc_rows = frappe.get_list(
+			"Attendance",
+			filters={**filters, "status": "Present"},
+			fields=["employee", "custom_employment_type_location", {"COUNT": "*", "as": "count"}],
+			group_by="employee, custom_employment_type_location",
+			limit_page_length=0,
+		)
+		for r in loc_rows:
+			loc = (r.get("custom_employment_type_location") or "").strip()
+			if loc not in location_totals:
+				continue
+			location_totals[loc] += r.count
+			emp = per_employee.get(r.employee)
+			if emp is not None:
+				emp[loc] = emp.get(loc, 0) + r.count
 
 	# Daily trend for the period (capped to keep the chart readable).
 	daily = frappe.get_list(
@@ -423,6 +477,8 @@ def get_attendance_summary(from_date, to_date, employee=None):
 	return {
 		"statuses": all_statuses,
 		"totals": totals,
+		"location_totals": location_totals,
+		"location_keys": location_keys,
 		"employees": list(per_employee.values()),
 		"days": days,
 		"trend": {s: list(v.values()) for s, v in trend.items()},

@@ -390,7 +390,12 @@ class AttendanceSheet {
 		}
 		head += `
 			<th class="tot first" title="${__("Total Working Days")}">${__("Days")}</th>
-			<th class="tot" style="color:var(--att-present)">${__("Present")}</th>
+			<th class="tot" style="color:var(--att-present)" title="${__("Present")} + ${__("Work From Home")}">${__("Present")}</th>
+			<th class="tot" style="color:var(--att-present)" title="${__("Present")} · ${__("Office")}">P-O</th>
+			<th class="tot" style="color:var(--att-present)" title="${__("Present")} · ${__("Site Location")}">P-S</th>
+			<th class="tot" style="color:var(--att-present)" title="${__("Present")} · ${__("Base")}">P-B</th>
+			<th class="tot" style="color:var(--att-wfh)" title="${__("Work From Home")}">WFH</th>
+			<th class="tot" style="color:var(--att-half)" title="${__("Half Day")}">HD</th>
 			<th class="tot" style="color:var(--att-absent)">${__("Absent")}</th>
 			<th class="tot" style="color:var(--att-leave)">${__("Leave")}</th>
 			<th class="tot">${__("Not Marked")}</th>
@@ -442,7 +447,12 @@ class AttendanceSheet {
 					</div></td>
 					${cells}
 					<td class="tot first">${t.working_days}</td>
-					<td class="tot" style="color:var(--att-present)">${t.present}</td>
+					<td class="tot" style="color:var(--att-present)">${t.present || 0}</td>
+					<td class="tot" style="color:var(--att-present)">${t.present_office || 0}</td>
+					<td class="tot" style="color:var(--att-present)">${t.present_site || 0}</td>
+					<td class="tot" style="color:var(--att-present)">${t.present_base || 0}</td>
+					<td class="tot" style="color:var(--att-wfh)">${t.wfh || 0}</td>
+					<td class="tot" style="color:var(--att-half)">${t.half_day || 0}</td>
 					<td class="tot" style="color:var(--att-absent)">${t.absent}</td>
 					<td class="tot" style="color:var(--att-leave)">${t.leave}</td>
 					<td class="tot text-muted">${t.unmarked}</td>
@@ -510,15 +520,22 @@ class AttendanceSheet {
 	}
 
 	render_kpis() {
-		const { day_counts = {}, total, focus_date } = this.data;
+		const { day_counts = {}, day_location_counts = {}, total, focus_date } = this.data;
 		const c = (s) => day_counts[s] || 0;
+		const loc = (k) => day_location_counts[k] || 0;
 		const marked = Object.values(day_counts).reduce((a, b) => a + b, 0);
 		const is_today = focus_date === frappe.datetime.get_today();
 		const day_lbl = is_today ? __("Today") : frappe.datetime.str_to_user(focus_date);
 		const pct = (n) => (total ? Math.round((n * 100) / total) + "% " + __("of workers") : "");
+		const present_total = c("Present") + c("Work From Home");
 		this.$wrapper.find(".kpis").html(
 			kpi("c-total", frappe.utils.icon("users", "md"), __("Total Workers"), total, day_lbl) +
-				kpi("c-present", abbr("Present"), `${__("Present")} · ${day_lbl}`, c("Present") + c("Work From Home"), pct(c("Present") + c("Work From Home"))) +
+				kpi("c-present", abbr("Present"), `${__("Present")} · ${day_lbl}`, present_total, pct(present_total)) +
+				kpi("c-present", "P-O", `P-O · ${day_lbl}`, loc("Office"), __("Office")) +
+				kpi("c-present", "P-S", `P-S · ${day_lbl}`, loc("Site Location"), __("Site Location")) +
+				kpi("c-present", "P-B", `P-B · ${day_lbl}`, loc("Base"), __("Base")) +
+				kpi("c-wfh", "WFH", `WFH · ${day_lbl}`, c("Work From Home"), pct(c("Work From Home"))) +
+				kpi("c-half", "HD", `HD · ${day_lbl}`, c("Half Day"), pct(c("Half Day"))) +
 				kpi("c-absent", abbr("Absent"), `${__("Absent")} · ${day_lbl}`, c("Absent"), pct(c("Absent"))) +
 				kpi("c-leave", abbr("On Leave"), `${__("On Leave")} · ${day_lbl}`, c("On Leave"), pct(c("On Leave"))) +
 				kpi("c-none", "?", `${__("Not Marked")} · ${day_lbl}`, Math.max(total - marked, 0), pct(Math.max(total - marked, 0)))
@@ -978,12 +995,28 @@ class AttendanceDashboard {
 	}
 
 	render() {
-		const { statuses, totals, employees, days, trend, period_days } = this.data;
+		const {
+			statuses,
+			totals,
+			location_totals = {},
+			location_keys = EMPLOYMENT_TYPE_LOCATION_OPTIONS,
+			employees,
+			days,
+			trend,
+			period_days,
+		} = this.data;
 		const f = this.get_filters();
 		const grand = statuses.reduce((s, k) => s + (totals[k] || 0), 0);
 		const pct = (n) => (grand ? ((n * 100) / grand).toFixed(1) + "%" : "0%");
 		const shown = statuses.filter((s) => totals[s] || MARK_STATUSES.includes(s));
 		const present = (totals["Present"] || 0) + (totals["Work From Home"] || 0);
+		const loc_kpis = location_keys
+			.map((loc) => {
+				const n = location_totals[loc] || 0;
+				const chip = LOCATION_ABBR[loc] || loc;
+				return kpi("c-present", chip, chip, n, __(loc));
+			})
+			.join("");
 
 		this.$wrapper.find(".kpis").html(
 			kpi(
@@ -996,6 +1029,7 @@ class AttendanceDashboard {
 				shown
 					.map((s) => kpi(STATUS_META[s].cls, abbr(s), __(s), totals[s] || 0, pct(totals[s] || 0)))
 					.join("") +
+				loc_kpis +
 				kpi("c-present", "%", __("Attendance Rate"), pct(present), __("Total records: {0}", [grand]))
 		);
 
@@ -1069,7 +1103,13 @@ class AttendanceDashboard {
 			.html(
 				`<span>${__("Total records")}: <b>${grand}</b></span>` +
 					`<span>${__("Attendance Rate")}: <b>${pct(present)}</b></span>` +
-					shown.map((s) => `<span>${__(s)}: <b>${totals[s] || 0}</b></span>`).join("")
+					shown.map((s) => `<span>${__(s)}: <b>${totals[s] || 0}</b></span>`).join("") +
+					location_keys
+						.map(
+							(loc) =>
+								`<span>${LOCATION_ABBR[loc] || __(loc)}: <b>${location_totals[loc] || 0}</b></span>`
+						)
+						.join("")
 			);
 
 		const sorted = [...employees].sort((a, b) => (b["Present"] || 0) - (a["Present"] || 0));
@@ -1078,6 +1118,9 @@ class AttendanceDashboard {
 				<thead><tr>
 					<th>${__("Employee")}</th>
 					${shown.map((s) => `<th class="n">${__(s)}</th>`).join("")}
+					${location_keys
+						.map((loc) => `<th class="n" title="${esc(__(loc))}">${esc(LOCATION_ABBR[loc] || loc)}</th>`)
+						.join("")}
 					<th class="n">${__("Total")}</th><th class="n">${__("Attendance %")}</th>
 				</tr></thead>
 				<tbody>${sorted
@@ -1089,6 +1132,14 @@ class AttendanceDashboard {
 								<div><a href="${frappe.utils.get_form_link("Employee", e.employee)}">${esc(e.employee_name || e.employee)}</a>
 								<div class="text-muted small">${esc(e.employee)}</div></div></div></td>
 							${shown.map((s) => `<td class="n"><span class="pill ${e[s] ? STATUS_META[s].cls : "c-none"}">${e[s] || 0}</span></td>`).join("")}
+							${location_keys
+								.map(
+									(loc) =>
+										`<td class="n"><span class="pill ${
+											e[loc] ? "c-present" : "c-none"
+										}">${e[loc] || 0}</span></td>`
+								)
+								.join("")}
 							<td class="n"><b>${tot}</b></td>
 							<td class="n"><b>${rate}%</b></td>
 						</tr>`;
