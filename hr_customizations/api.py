@@ -29,19 +29,51 @@ def get_monthly_attendance(year, month, search=None, start=0):
 	to_date = getdate(f"{year}-{month:02d}-{days_in_month:02d}")
 
 	filters, or_filters = _employee_filters(search)
-	employees = frappe.get_list(
+	# All matching employees (name + display name) so we can sort marked-first across pages.
+	all_employees = frappe.get_list(
 		"Employee",
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", "employee_name", "designation", "department", "date_of_joining", "company"],
+		fields=["name", "employee_name"],
 		order_by="employee_name asc",
-		start=start,
-		page_length=PAGE_LENGTH,
+		limit_page_length=0,
 	)
-	emp_names = frappe.get_list(
-		"Employee", filters=filters, or_filters=or_filters, pluck="name", limit_page_length=0
-	)
+	emp_names = [e.name for e in all_employees]
 	total = len(emp_names)
+
+	marked_employees = set()
+	if emp_names:
+		marked_employees = set(
+			frappe.get_all(
+				"Attendance",
+				filters={
+					"employee": ["in", emp_names],
+					"attendance_date": ["between", [from_date, to_date]],
+					"docstatus": ["<", 2],
+				},
+				pluck="employee",
+				distinct=True,
+			)
+		)
+
+	# Marked attendance first, then unmarked; name A→Z within each group.
+	all_employees.sort(
+		key=lambda e: (0 if e.name in marked_employees else 1, (e.employee_name or e.name or "").lower())
+	)
+	page_names = [e.name for e in all_employees[start : start + PAGE_LENGTH]]
+
+	employees = []
+	if page_names:
+		by_name = {
+			e.name: e
+			for e in frappe.get_list(
+				"Employee",
+				filters={"name": ["in", page_names]},
+				fields=["name", "employee_name", "designation", "department", "date_of_joining", "company"],
+				limit_page_length=0,
+			)
+		}
+		employees = [by_name[n] for n in page_names if n in by_name]
 
 	attendance = {}
 	if employees:
