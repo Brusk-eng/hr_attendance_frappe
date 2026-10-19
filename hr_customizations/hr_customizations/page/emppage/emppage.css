@@ -106,6 +106,13 @@
 .att-status-picker button.active[data-status="On Leave"] { border-color: var(--att-leave); background: var(--att-leave-bg); }
 .att-status-picker button.active[data-status="Half Day"] { border-color: var(--att-half); background: var(--att-half-bg); }
 .att-status-picker button.active[data-status="Work From Home"] { border-color: var(--att-wfh); background: var(--att-wfh-bg); }
+.att-half-picker { grid-template-columns: repeat(2, minmax(100px, 1fr)); max-width: 280px; }
+.att-half-picker button[data-half="Present"] .ic { background: var(--att-present-bg); color: var(--att-present); }
+.att-half-picker button[data-half="Absent"] .ic { background: var(--att-absent-bg); color: var(--att-absent); }
+.att-half-picker button.active[data-half="Present"] { border-color: var(--att-present); background: var(--att-present-bg); }
+.att-half-picker button.active[data-half="Absent"] { border-color: var(--att-absent); background: var(--att-absent-bg); }
+.att-half-wrap { margin: 4px 0 10px; }
+.att-half-wrap .help-box { margin-top: 6px; }
 .att-existing { font-size: 12px; padding: 8px 10px; border-radius: 8px; background: var(--subtle-fg); color: var(--text-muted); }
 .att-emp-head { display: flex; gap: 10px; align-items: center; padding: 4px 0 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 12px; }
 .att-emp-head .nm { font-weight: 600; font-size: 14px; }

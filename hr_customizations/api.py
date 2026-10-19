@@ -77,7 +77,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 
 	attendance = {}
 	if employees:
-		att_fields = ["name", "employee", "attendance_date", "status", "docstatus"]
+		att_fields = ["name", "employee", "attendance_date", "status", "docstatus", "half_day_status"]
 		if _has_employment_type_location_field():
 			att_fields.append("custom_employment_type_location")
 		rows = frappe.get_list(
@@ -95,6 +95,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 				"name": r.name,
 				"status": r.status,
 				"docstatus": r.docstatus,
+				"half_day_status": r.get("half_day_status") or None,
 				"employment_type_location": r.get("custom_employment_type_location") or None,
 			}
 
@@ -259,9 +260,62 @@ def _apply_employment_type_location(doc, status, employment_type_location=None):
 		doc.custom_employment_type_location = ""
 
 
+HALF_DAY_OTHER_STATUSES = ("Present", "Absent")
+
+
+def _has_approved_leave(employee, attendance_date):
+	return bool(
+		frappe.db.exists(
+			"Leave Application",
+			{
+				"employee": employee,
+				"from_date": ("<=", attendance_date),
+				"to_date": (">=", attendance_date),
+				"status": "Approved",
+				"docstatus": 1,
+			},
+		)
+	)
+
+
+def _preserve_half_day_status(doc, half_day_status):
+	"""HRMS Attendance.check_leave_record forces half_day_status=Absent when there is no leave.
+
+	The attendance page lets HR pick Present/Absent for the other half without a Leave Application,
+	so keep the chosen value (and skip the noisy alert) when marking Half Day from this API.
+	"""
+	from hrms.hr.doctype.attendance.attendance import Attendance as HRMSAttendance
+
+	intended = half_day_status
+
+	def check_leave_record():
+		if (
+			doc.status == "Half Day"
+			and intended in HALF_DAY_OTHER_STATUSES
+			and not _has_approved_leave(doc.employee, doc.attendance_date)
+		):
+			doc.leave_type = None
+			doc.leave_application = None
+			doc.modify_half_day_status = 0
+			doc.half_day_status = intended
+			return
+
+		HRMSAttendance.check_leave_record(doc)
+		if doc.status == "Half Day" and intended in HALF_DAY_OTHER_STATUSES:
+			doc.half_day_status = intended
+
+	doc.check_leave_record = check_leave_record
+
+
 @frappe.whitelist()
 def mark_attendance(
-	employee, attendance_date, status, submit=1, leave_type=None, employment_type_location=None
+	employee,
+	attendance_date,
+	status,
+	submit=1,
+	leave_type=None,
+	employment_type_location=None,
+	half_day_status=None,
 ):
 	"""Create (or update) the Attendance of an employee for one day."""
 	if status not in STATUSES:
@@ -271,16 +325,31 @@ def mark_attendance(
 		frappe.throw(_("Attendance can not be marked for future dates"))
 	submit = cint(submit)
 
+	if status == "Half Day":
+		half_day_status = half_day_status or "Absent"
+		if half_day_status not in HALF_DAY_OTHER_STATUSES:
+			frappe.throw(_("Invalid Status for Other Half {0}").format(half_day_status))
+	else:
+		half_day_status = None
+
+	existing_fields = ["name", "docstatus", "status", "half_day_status"]
+	if _has_employment_type_location_field():
+		existing_fields.append("custom_employment_type_location")
 	existing = frappe.db.get_value(
 		"Attendance",
 		{"employee": employee, "attendance_date": attendance_date, "docstatus": ["<", 2]},
-		["name", "docstatus", "status"],
+		existing_fields,
 		as_dict=True,
 	)
 
 	amended_from = None
 	if existing and existing.docstatus == 1:
-		if existing.status == status:
+		same = existing.status == status and (existing.get("half_day_status") or None) == half_day_status
+		if same and status in LOCATION_STATUSES and _has_employment_type_location_field():
+			same = (existing.get("custom_employment_type_location") or None) == (
+				employment_type_location or None
+			)
+		if same:
 			return existing.name
 		# Changing a submitted attendance: cancel it and create an amendment.
 		old = frappe.get_doc("Attendance", existing.name)
@@ -299,7 +368,10 @@ def mark_attendance(
 
 	doc.status = status
 	doc.leave_type = (leave_type or "Leave Without Pay") if status == "On Leave" else None
+	doc.half_day_status = half_day_status
 	_apply_employment_type_location(doc, status, employment_type_location)
+	if status == "Half Day":
+		_preserve_half_day_status(doc, half_day_status)
 	doc.save()
 	if submit:
 		doc.submit()
@@ -308,7 +380,13 @@ def mark_attendance(
 
 @frappe.whitelist()
 def mark_bulk_attendance(
-	employees, attendance_date, status, submit=1, leave_type=None, employment_type_location=None
+	employees,
+	attendance_date,
+	status,
+	submit=1,
+	leave_type=None,
+	employment_type_location=None,
+	half_day_status=None,
 ):
 	"""Mark the same status for several employees who are not yet marked on that date."""
 	employees = frappe.parse_json(employees) or []
@@ -336,6 +414,7 @@ def mark_bulk_attendance(
 				submit,
 				leave_type,
 				employment_type_location=employment_type_location,
+				half_day_status=half_day_status,
 			)
 			marked += 1
 		except Exception:
@@ -346,7 +425,7 @@ def mark_bulk_attendance(
 
 @frappe.whitelist()
 def mark_selected_attendance(
-	cells, status, submit=1, leave_type=None, employment_type_location=None
+	cells, status, submit=1, leave_type=None, employment_type_location=None, half_day_status=None
 ):
 	"""Mark attendance for specific employee+date cells selected on the sheet."""
 	cells = frappe.parse_json(cells) or []
@@ -376,6 +455,7 @@ def mark_selected_attendance(
 				submit,
 				leave_type,
 				employment_type_location=employment_type_location,
+				half_day_status=half_day_status,
 			)
 			marked += 1
 		except Exception:

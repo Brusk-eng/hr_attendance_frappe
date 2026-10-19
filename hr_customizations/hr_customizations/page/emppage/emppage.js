@@ -7,6 +7,7 @@ const MARK_STATUSES = ["Present", "Absent", "On Leave", "Half Day", "Work From H
 // Work From Home does not require Employment Type Location.
 const LOCATION_STATUSES = ["Present", "Half Day"];
 const EMPLOYMENT_TYPE_LOCATION_OPTIONS = ["Office", "Site Location", "Base"];
+const HALF_DAY_OTHER_OPTIONS = ["Absent", "Present"];
 const LOCATION_ABBR = {
 	Office: "P-O",
 	"Site Location": "P-S",
@@ -570,6 +571,7 @@ class AttendanceSheet {
 		const emp = this.data.employees.find((e) => e.name === employee) || { name: employee, attendance: {} };
 		const today = frappe.datetime.get_today();
 		let status = "Present";
+		let half_day_status = "Absent";
 
 		const d = new frappe.ui.Dialog({
 			title: __("Mark Attendance"),
@@ -592,10 +594,11 @@ class AttendanceSheet {
 					options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
 					default: "Base",
 					description: __(
-						"Required for Present. Used for Salary Slip day calculation when TRS is installed."
+						"Required for Present and Half Day. Used for Salary Slip day calculation when TRS is installed."
 					),
 					hidden: 0,
 				},
+				{ fieldname: "half_day_html", fieldtype: "HTML" },
 				{
 					fieldname: "leave_type",
 					fieldtype: "Link",
@@ -629,6 +632,31 @@ class AttendanceSheet {
 					(s) => `<button type="button" data-status="${s}"><span class="ic">${abbr(s)}</span>${__(s)}</button>`
 				).join("")}
 			</div></div>`).appendTo(d.fields_dict.status_html.$wrapper);
+
+		const $half = $(`<div class="att-half-wrap" style="display:none">
+			<label class="control-label reqd">${__("Status for Other Half")}</label>
+			<div class="att-status-picker att-half-picker">
+				${HALF_DAY_OTHER_OPTIONS.map(
+					(s) =>
+						`<button type="button" data-half="${s}"><span class="ic">${abbr(s)}</span>${__(s)}</button>`
+				).join("")}
+			</div>
+			<div class="help-box small text-muted">${__(
+				"What the other half of the day counts as when status is Half Day."
+			)}</div>
+		</div>`).appendTo(d.fields_dict.half_day_html.$wrapper);
+
+		const set_half_day_status = (s) => {
+			half_day_status = HALF_DAY_OTHER_OPTIONS.includes(s) ? s : "Absent";
+			$half
+				.find("button")
+				.removeClass("active")
+				.filter(`[data-half="${half_day_status}"]`)
+				.addClass("active");
+		};
+		$half.on("click", "button", (e) => set_half_day_status($(e.currentTarget).attr("data-half")));
+		set_half_day_status("Absent");
+
 		const set_status = (s) => {
 			status = s;
 			$picker.find("button").removeClass("active").filter(`[data-status="${s}"]`).addClass("active");
@@ -637,6 +665,10 @@ class AttendanceSheet {
 			const needs_location = LOCATION_STATUSES.includes(s);
 			d.set_df_property("employment_type_location", "hidden", needs_location ? 0 : 1);
 			d.set_df_property("employment_type_location", "reqd", needs_location ? 1 : 0);
+			$half.toggle(s === "Half Day");
+			if (s === "Half Day" && !HALF_DAY_OTHER_OPTIONS.includes(half_day_status)) {
+				set_half_day_status("Absent");
+			}
 			if (!needs_location) {
 				d.set_value("employment_type_location", "");
 			} else if (!d.get_value("employment_type_location")) {
@@ -652,14 +684,21 @@ class AttendanceSheet {
 			if (a?.employment_type_location) {
 				d.set_value("employment_type_location", a.employment_type_location);
 			}
+			if (a?.status === "Half Day") {
+				set_half_day_status(a.half_day_status || "Absent");
+			}
 			const loc_txt =
 				a && LOCATION_STATUSES.includes(a.status) && a.employment_type_location
 					? ` · ${__(a.employment_type_location)}`
 					: "";
+			const half_txt =
+				a?.status === "Half Day" && a.half_day_status
+					? ` · ${__("Other half")}: ${__(a.half_day_status)}`
+					: "";
 			d.fields_dict.existing_html.$wrapper.html(
 				a
 					? `<div class="att-existing">${frappe.utils.icon("info", "sm")}
-						${__("Already marked as {0}", [`<b>${__(a.status)}${esc(loc_txt)}</b>`])}
+						${__("Already marked as {0}", [`<b>${__(a.status)}${esc(loc_txt)}${esc(half_txt)}</b>`])}
 						(${a.docstatus === 0 ? __("Draft") : __("Submitted")}) ·
 						<a href="${frappe.utils.get_form_link("Attendance", a.name)}" target="_blank">${esc(a.name)}</a>
 						${a.docstatus === 1 ? `<br>${__("Choosing a different status will cancel and amend it.")}` : ""}</div>`
@@ -682,6 +721,10 @@ class AttendanceSheet {
 				});
 				return;
 			}
+			if (status === "Half Day" && !HALF_DAY_OTHER_OPTIONS.includes(half_day_status)) {
+				frappe.msgprint(__("Please select Status for Other Half."));
+				return;
+			}
 			frappe
 				.call({
 					method: `${API}.mark_attendance`,
@@ -691,6 +734,7 @@ class AttendanceSheet {
 						status,
 						leave_type: values.leave_type,
 						employment_type_location: values.employment_type_location || null,
+						half_day_status: status === "Half Day" ? half_day_status : null,
 						submit,
 					},
 					freeze: true,
@@ -779,6 +823,16 @@ class AttendanceSheet {
 				),
 			},
 			{
+				fieldname: "half_day_status",
+				fieldtype: "Select",
+				label: __("Status for Other Half"),
+				options: HALF_DAY_OTHER_OPTIONS,
+				default: "Absent",
+				depends_on: "eval:doc.status=='Half Day'",
+				mandatory_depends_on: "eval:doc.status=='Half Day'",
+				description: __("What the other half of the day counts as when status is Half Day."),
+			},
+			{
 				fieldname: "leave_type",
 				fieldtype: "Link",
 				label: __("Leave Type"),
@@ -816,6 +870,7 @@ class AttendanceSheet {
 								status: v.status,
 								leave_type: v.leave_type,
 								employment_type_location: v.employment_type_location || null,
+								half_day_status: v.status === "Half Day" ? v.half_day_status : null,
 								submit: v.submit,
 							},
 							freeze: true,
@@ -837,6 +892,7 @@ class AttendanceSheet {
 							status: v.status,
 							leave_type: v.leave_type,
 							employment_type_location: v.employment_type_location || null,
+							half_day_status: v.status === "Half Day" ? v.half_day_status : null,
 							submit: v.submit,
 						},
 						freeze: true,
