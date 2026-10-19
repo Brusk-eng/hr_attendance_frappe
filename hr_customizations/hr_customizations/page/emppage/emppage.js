@@ -3,8 +3,9 @@
 //   /desk/emppage/report  -> attendance dashboard (charts per period / employee)
 
 const API = "hr_customizations.api";
-const MARK_STATUSES = ["Present", "Absent", "On Leave"];
-const LOCATION_STATUSES = ["Present", "Half Day", "Work From Home"];
+const MARK_STATUSES = ["Present", "Absent", "On Leave", "Half Day", "Work From Home"];
+// Work From Home does not require Employment Type Location.
+const LOCATION_STATUSES = ["Present", "Half Day"];
 const EMPLOYMENT_TYPE_LOCATION_OPTIONS = ["Office", "Site Location", "Base"];
 const LOCATION_ABBR = {
 	Office: "P-O",
@@ -15,8 +16,10 @@ const STATUS_META = {
 	Present: { abbr: "P", cls: "c-present", color: "#16a34a" },
 	Absent: { abbr: "A", cls: "c-absent", color: "#dc2626" },
 	"On Leave": { abbr: "L", cls: "c-leave", color: "#d97706" },
-	"Half Day": { abbr: "H", cls: "c-half", color: "#2563eb" },
-	"Work From Home": { abbr: "W", cls: "c-wfh", color: "#7c3aed" },
+	"Half Day": { abbr: "HD", cls: "c-half", color: "#2563eb" },
+	"Work From Home": { abbr: "WFH", cls: "c-wfh", color: "#7c3aed" },
+	Holiday: { abbr: "H", cls: "c-holiday", color: "#6b7280" },
+	"Weekly Off": { abbr: "WO", cls: "c-wo", color: "#9ca3af" },
 };
 const status_color = (s) => STATUS_META[s].color;
 const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
@@ -29,8 +32,8 @@ const cell_label = (status, location) => {
 };
 const cell_title = (status, location, is_draft) => {
 	let t = __(status);
-	if (status === "Present" && location) {
-		t = `${__("Present")} · ${__(location)}`;
+	if (LOCATION_STATUSES.includes(status) && location) {
+		t = `${__(status)} · ${__(location)}`;
 	}
 	if (is_draft) t += ` (${__("Draft")})`;
 	return t;
@@ -243,6 +246,8 @@ class AttendanceSheet {
 						<span><span class="chip c-present loc">P-O</span> ${__("Present")} · ${__("Office")}</span>
 						<span><span class="chip c-present loc">P-S</span> ${__("Present")} · ${__("Site")}</span>
 						<span><span class="chip c-present loc">P-B</span> ${__("Present")} · ${__("Base")}</span>
+						<span><span class="chip c-holiday">${abbr("Holiday")}</span> ${__("Holiday")}</span>
+						<span><span class="chip c-wo">${abbr("Weekly Off")}</span> ${__("Weekly Off")}</span>
 						<span><span class="chip c-present draft">${abbr("Present")}</span> ${__("Draft")}</span>
 						<span><span class="chip empty"></span> ${__("Not Marked")}</span>
 					</div>
@@ -397,8 +402,10 @@ class AttendanceSheet {
 				for (let d = 1; d <= days_in_month; d++) {
 					const ds = this.date_str(d);
 					const a = emp.attendance[ds];
+					const cal = (emp.calendar || {})[ds];
 					const future = ds > today;
 					const is_sel = this.selected.has(this.cell_key(emp.name, ds));
+					const is_off = cal === "Holiday" || cal === "Weekly Off";
 					let chip = `<span class="chip empty"></span>`;
 					let title = frappe.datetime.str_to_user(ds);
 					if (a) {
@@ -408,13 +415,19 @@ class AttendanceSheet {
 						const loc_cls = a.status === "Present" && loc ? " loc" : "";
 						chip = `<span class="chip ${meta.cls}${loc_cls}${a.docstatus === 0 ? " draft" : ""}">${esc(label)}</span>`;
 						title += ` · ${cell_title(a.status, loc, a.docstatus === 0)}`;
+					} else if (is_off) {
+						const meta = STATUS_META[cal];
+						chip = `<span class="chip ${meta.cls}">${esc(meta.abbr)}</span>`;
+						title += ` · ${__(cal)}`;
 					} else if (!future) {
 						title += ` · ${__("Not Marked")}`;
 					}
-					if (!future) title += ` · ${__("Hold & drag to select · click to mark")}`;
-					cells += `<td class="day${future ? " future" : ""}${ds === today ? " today-col" : ""}${
-						is_sel ? " selected" : ""
-					}" data-date="${ds}" title="${esc(title)}">${future && !a ? "" : chip}</td>`;
+					if (!future && !is_off) title += ` · ${__("Hold & drag to select · click to mark")}`;
+					cells += `<td class="day${future ? " future" : ""}${is_off ? " day-off" : ""}${
+						ds === today ? " today-col" : ""
+					}${is_sel ? " selected" : ""}" data-date="${ds}" title="${esc(title)}">${
+						future && !a && !is_off ? "" : chip
+					}</td>`;
 				}
 				const t = emp.totals;
 				const rate = t.working_days ? Math.round((t.present * 100) / t.working_days) : 0;
@@ -623,7 +636,7 @@ class AttendanceSheet {
 				d.set_value("employment_type_location", a.employment_type_location);
 			}
 			const loc_txt =
-				a?.status === "Present" && a.employment_type_location
+				a && LOCATION_STATUSES.includes(a.status) && a.employment_type_location
 					? ` · ${__(a.employment_type_location)}`
 					: "";
 			d.fields_dict.existing_html.$wrapper.html(
@@ -647,7 +660,7 @@ class AttendanceSheet {
 					title: __("Employment Type Location Required"),
 					indicator: "red",
 					message: __(
-						"Employment Type Location is required when Status is Present. Please select Office, Site Location, or Base."
+						"Employment Type Location is required for Present and Half Day. Please select Office, Site Location, or Base."
 					),
 				});
 				return;
@@ -677,10 +690,16 @@ class AttendanceSheet {
 
 		d.show();
 		show_existing();
-		// keyboard shortcuts: P / A / L
+		// keyboard shortcuts: P / A / L / H / W
 		d.$wrapper.on("keydown", (e) => {
 			if ($(e.target).is("input, textarea")) return;
-			const map = { p: "Present", a: "Absent", l: "On Leave" };
+			const map = {
+				p: "Present",
+				a: "Absent",
+				l: "On Leave",
+				h: "Half Day",
+				w: "Work From Home",
+			};
 			if (map[e.key?.toLowerCase()]) set_status(map[e.key.toLowerCase()]);
 		});
 	}
@@ -736,10 +755,10 @@ class AttendanceSheet {
 				label: __("Employment Type Location"),
 				options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
 				default: "Base",
-				depends_on: "eval:doc.status=='Present'",
-				mandatory_depends_on: "eval:doc.status=='Present'",
+				depends_on: "eval:['Present','Half Day'].includes(doc.status)",
+				mandatory_depends_on: "eval:['Present','Half Day'].includes(doc.status)",
 				description: __(
-					"Required for Present. Used for Salary Slip day calculation when TRS is installed."
+					"Required for Present and Half Day (not Work From Home). Used for Salary Slip day calculation when TRS is installed."
 				),
 			},
 			{

@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, today
 
-STATUSES = ("Present", "Absent", "On Leave")
+STATUSES = ("Present", "Absent", "On Leave", "Half Day", "Work From Home")
 PAGE_LENGTH = 100
 
 
@@ -33,7 +33,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 		"Employee",
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", "employee_name", "designation", "department", "date_of_joining"],
+		fields=["name", "employee_name", "designation", "department", "date_of_joining", "company"],
 		order_by="employee_name asc",
 		start=start,
 		page_length=PAGE_LENGTH,
@@ -66,25 +66,60 @@ def get_monthly_attendance(year, month, search=None, start=0):
 				"employment_type_location": r.get("custom_employment_type_location") or None,
 			}
 
-	# Workers have no weekends: every day of the month counts, up to today for the current month.
+	holiday_day_map = _get_employee_holiday_day_map(
+		{e.name: e.company for e in employees}, from_date, to_date
+	)
+
+	# Working days = calendar days in range up to today, minus Holiday / Weekly Off from Holiday List.
 	last_day = min(to_date, getdate(today()))
-	working_days = (last_day - from_date).days + 1 if last_day >= from_date else 0
 
 	for e in employees:
 		marks = attendance.get(e.name, {})
+		cal = holiday_day_map.get(e.name, {})
 		e.attendance = marks
+		e.calendar = cal
 		# Days before the joining date are not working days for that employee.
 		emp_start = max(from_date, getdate(e.date_of_joining)) if e.date_of_joining else from_date
-		emp_working_days = (last_day - emp_start).days + 1 if last_day >= emp_start else 0
+		emp_working_days = 0
+		off_days = 0
+		d = emp_start
+		while d <= last_day:
+			ds = str(d)
+			day_off = cal.get(ds)
+			if day_off in ("Holiday", "Weekly Off"):
+				off_days += 1
+			else:
+				emp_working_days += 1
+			d = add_days(d, 1)
 		e.totals = {
 			"working_days": emp_working_days,
+			"holidays": off_days,
 			"present": sum(1 for m in marks.values() if m["status"] in ("Present", "Work From Home")),
 			"absent": sum(1 for m in marks.values() if m["status"] == "Absent"),
 			"leave": sum(1 for m in marks.values() if m["status"] == "On Leave"),
 			"half_day": sum(1 for m in marks.values() if m["status"] == "Half Day"),
 			"draft": sum(1 for m in marks.values() if m["docstatus"] == 0),
 		}
-		e.totals["unmarked"] = max(emp_working_days - len(marks), 0)
+		# Unmarked = working days with no Attendance record (H/WO days are not unmarked).
+		marked_working = 0
+		for ds in marks:
+			dd = getdate(ds)
+			if dd < emp_start or dd > last_day:
+				continue
+			if cal.get(ds) in ("Holiday", "Weekly Off"):
+				continue
+			marked_working += 1
+		e.totals["unmarked"] = max(emp_working_days - marked_working, 0)
+
+	# Month-level working days (for sheet header): first page employee companies may differ;
+	# use union off-days from holiday lists of employees on this page, else calendar span.
+	page_off = set()
+	for emp_cal in holiday_day_map.values():
+		for ds, kind in emp_cal.items():
+			if kind in ("Holiday", "Weekly Off") and from_date <= getdate(ds) <= last_day:
+				page_off.add(ds)
+	span = (last_day - from_date).days + 1 if last_day >= from_date else 0
+	working_days = max(span - len(page_off), 0) if holiday_day_map else span
 
 	# KPI cards: today's status (or the last day of a past month) for all matching employees.
 	focus_date = min(to_date, max(from_date, getdate(today())))
@@ -109,8 +144,35 @@ def get_monthly_attendance(year, month, search=None, start=0):
 	}
 
 
-LOCATION_STATUSES = ("Present", "Half Day", "Work From Home")
+# Work From Home does not use Employment Type Location (Office/Site/Base).
+LOCATION_STATUSES = ("Present", "Half Day")
 LOCATION_OPTIONS = ("Office", "Site Location", "Base")
+
+
+def _get_employee_holiday_day_map(employee_company_map, from_date, to_date):
+	"""{employee: {yyyy-mm-dd: 'Holiday'|'Weekly Off'}} from Holiday List (incl. Fri/Sat WO)."""
+	if not employee_company_map:
+		return {}
+	try:
+		from hrms.utils.holiday_list import (
+			get_holiday_list_ranges_for_employees,
+			get_holidays_in_ranges_map,
+		)
+	except ImportError:
+		return {}
+
+	ranges = get_holiday_list_ranges_for_employees(
+		employee_company_map, from_date, to_date, raise_exception=False
+	)
+	holidays_by_emp = get_holidays_in_ranges_map(ranges)
+	day_map = {}
+	for employee, holidays in holidays_by_emp.items():
+		days = {}
+		for h in holidays:
+			ds = str(getdate(h.holiday_date))
+			days[ds] = "Weekly Off" if h.get("weekly_off") else "Holiday"
+		day_map[employee] = days
+	return day_map
 
 
 def _has_employment_type_location_field():

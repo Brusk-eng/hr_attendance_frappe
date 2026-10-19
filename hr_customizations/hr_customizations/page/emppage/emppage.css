@@ -5,10 +5,13 @@
 	--att-leave: #d97706;   --att-leave-bg: #fef3c7;
 	--att-half: #2563eb;    --att-half-bg: #dbeafe;
 	--att-wfh: #7c3aed;     --att-wfh-bg: #ede9fe;
+	--att-holiday: #6b7280; --att-holiday-bg: #e5e7eb;
+	--att-wo: #9ca3af;      --att-wo-bg: #f3f4f6;
 }
 [data-theme="dark"] .emppage, [data-theme="dark"] .att-dialog {
 	--att-present-bg: rgba(22,163,74,.22); --att-absent-bg: rgba(220,38,38,.22);
 	--att-leave-bg: rgba(217,119,6,.22);   --att-half-bg: rgba(37,99,235,.22); --att-wfh-bg: rgba(124,58,237,.22);
+	--att-holiday-bg: rgba(107,114,128,.28); --att-wo-bg: rgba(156,163,175,.22);
 }
 .emppage .layout-main-section { background: transparent; border: 0; }
 .emppage .att-panel { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--border-radius-lg); box-shadow: var(--card-shadow); }
@@ -38,7 +41,10 @@
 .emppage .c-leave { color: var(--att-leave); background: var(--att-leave-bg); }
 .emppage .c-half { color: var(--att-half); background: var(--att-half-bg); }
 .emppage .c-wfh { color: var(--att-wfh); background: var(--att-wfh-bg); }
+.emppage .c-holiday { color: var(--att-holiday); background: var(--att-holiday-bg); }
+.emppage .c-wo { color: var(--att-wo); background: var(--att-wo-bg); }
 .emppage .c-none { color: var(--text-muted); background: var(--subtle-fg); }
+.emppage td.day.day-off { opacity: .85; }
 .emppage .c-total { color: var(--primary); background: var(--subtle-accent); }
 
 /* ---------- sheet ---------- */
@@ -74,7 +80,7 @@
 .emppage td.day { cursor: pointer; padding: 4px 2px; }
 .emppage td.day.future { cursor: not-allowed; opacity: .45; }
 .emppage .chip { display: inline-grid; place-items: center; width: 26px; height: 24px; border-radius: 6px; font-weight: 700; font-size: 11px; transition: transform .1s; }
-.emppage .chip.loc { width: auto; min-width: 28px; padding: 0 3px; font-size: 9px; letter-spacing: -0.02em; }
+.emppage .chip.loc, .emppage .chip.c-wfh { width: auto; min-width: 28px; padding: 0 3px; font-size: 9px; letter-spacing: -0.02em; }
 .emppage td.day:not(.future):hover .chip { transform: scale(1.12); box-shadow: 0 0 0 2px var(--primary); }
 .emppage .chip.empty { background: transparent; border: 1px dashed var(--border-color); }
 .emppage .chip.draft { border: 1.5px dashed currentColor; opacity: .75; }
@@ -87,15 +93,19 @@
 .emppage .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
 
 /* ---------- mark dialog ---------- */
-.att-status-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.att-status-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 8px; }
 .att-status-picker button { border: 2px solid var(--border-color); background: var(--card-bg); border-radius: 10px; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; color: var(--text-color); transition: all .12s; }
 .att-status-picker button .ic { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
 .att-status-picker button[data-status="Present"] .ic { background: var(--att-present-bg); color: var(--att-present); }
 .att-status-picker button[data-status="Absent"] .ic { background: var(--att-absent-bg); color: var(--att-absent); }
 .att-status-picker button[data-status="On Leave"] .ic { background: var(--att-leave-bg); color: var(--att-leave); }
+.att-status-picker button[data-status="Half Day"] .ic { background: var(--att-half-bg); color: var(--att-half); }
+.att-status-picker button[data-status="Work From Home"] .ic { background: var(--att-wfh-bg); color: var(--att-wfh); }
 .att-status-picker button.active[data-status="Present"] { border-color: var(--att-present); background: var(--att-present-bg); }
 .att-status-picker button.active[data-status="Absent"] { border-color: var(--att-absent); background: var(--att-absent-bg); }
 .att-status-picker button.active[data-status="On Leave"] { border-color: var(--att-leave); background: var(--att-leave-bg); }
+.att-status-picker button.active[data-status="Half Day"] { border-color: var(--att-half); background: var(--att-half-bg); }
+.att-status-picker button.active[data-status="Work From Home"] { border-color: var(--att-wfh); background: var(--att-wfh-bg); }
 .att-existing { font-size: 12px; padding: 8px 10px; border-radius: 8px; background: var(--subtle-fg); color: var(--text-muted); }
 .att-emp-head { display: flex; gap: 10px; align-items: center; padding: 4px 0 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 12px; }
 .att-emp-head .nm { font-weight: 600; font-size: 14px; }
