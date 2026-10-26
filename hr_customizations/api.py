@@ -2,7 +2,7 @@ import calendar
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, today
+from frappe.utils import add_days, cint, flt, getdate, today
 
 STATUSES = ("Present", "Absent", "On Leave", "Half Day", "Work From Home")
 PAGE_LENGTH = 100
@@ -77,7 +77,15 @@ def get_monthly_attendance(year, month, search=None, start=0):
 
 	attendance = {}
 	if employees:
-		att_fields = ["name", "employee", "attendance_date", "status", "docstatus", "half_day_status"]
+		att_fields = [
+			"name",
+			"employee",
+			"attendance_date",
+			"status",
+			"docstatus",
+			"half_day_status",
+			"leave_type",
+		]
 		if _has_employment_type_location_field():
 			att_fields.append("custom_employment_type_location")
 		rows = frappe.get_list(
@@ -96,6 +104,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 				"status": r.status,
 				"docstatus": r.docstatus,
 				"half_day_status": r.get("half_day_status") or None,
+				"leave_type": r.get("leave_type") or None,
 				"employment_type_location": r.get("custom_employment_type_location") or None,
 			}
 
@@ -278,6 +287,207 @@ def _has_approved_leave(employee, attendance_date):
 	)
 
 
+def _get_approved_leave_application(employee, attendance_date, leave_type=None):
+	filters = {
+		"employee": employee,
+		"from_date": ("<=", attendance_date),
+		"to_date": (">=", attendance_date),
+		"status": "Approved",
+		"docstatus": 1,
+	}
+	if leave_type:
+		filters["leave_type"] = leave_type
+	return frappe.db.get_value("Leave Application", filters, "name")
+
+
+def _cancel_leave_application(leave_application):
+	"""Cancel Leave Application so leave balance is restored and linked attendance is cancelled."""
+	if not leave_application:
+		return
+	la = frappe.get_doc("Leave Application", leave_application)
+	if la.docstatus != 1:
+		return
+	la.flags.ignore_permissions = True
+	la.cancel()
+
+
+def _clear_day_for_leave_change(employee, attendance_date, existing):
+	"""Cancel linked Leave Application / Attendance before changing the day's mark."""
+	leave_application = (existing or {}).get("leave_application") or _get_approved_leave_application(
+		employee, attendance_date
+	)
+	if leave_application:
+		_cancel_leave_application(leave_application)
+		return
+
+	if not existing:
+		return
+	doc = frappe.get_doc("Attendance", existing.name)
+	if doc.docstatus == 1:
+		doc.flags.ignore_permissions = True
+		doc.cancel()
+	elif doc.docstatus == 0:
+		frappe.delete_doc("Attendance", doc.name, force=1, ignore_permissions=True)
+
+
+def _leave_allocation_list_link():
+	return f'<a href="{frappe.utils.get_url_to_list("Leave Allocation")}">{_("Leave Allocation")}</a>'
+
+
+def _validate_leave_allocation(employee, leave_type, attendance_date):
+	"""Block On Leave when the employee has no usable allocation for that leave type/date.
+
+	Does not create Attendance or Leave Application when validation fails.
+	"""
+	from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on, is_lwp
+
+	if is_lwp(leave_type):
+		return
+
+	list_link = _leave_allocation_list_link()
+	date_label = frappe.bold(frappe.format(attendance_date, {"fieldtype": "Date"}))
+
+	has_allocation = frappe.db.exists(
+		"Leave Allocation",
+		{
+			"employee": employee,
+			"leave_type": leave_type,
+			"docstatus": 1,
+			"from_date": ("<=", attendance_date),
+			"to_date": (">=", attendance_date),
+		},
+	)
+	if not has_allocation:
+		frappe.throw(
+			_(
+				"Leave Type {0} is not allocated to Employee {1} for {2}. "
+				"Create a Leave Allocation from {3}, then try again. No attendance was marked."
+			).format(frappe.bold(leave_type), frappe.bold(employee), date_label, list_link),
+			title=_("Leave Not Allocated"),
+		)
+
+	balance = get_leave_balance_on(
+		employee,
+		leave_type,
+		attendance_date,
+		to_date=attendance_date,
+		for_consumption=True,
+	)
+	available = flt(balance.get("leave_balance_for_consumption"))
+	if available < 1:
+		frappe.throw(
+			_(
+				"Insufficient leave balance for Employee {0} and Leave Type {1} on {2} "
+				"(available: {3}). Update the allocation in {4}. No attendance was marked."
+			).format(
+				frappe.bold(employee),
+				frappe.bold(leave_type),
+				date_label,
+				frappe.bold(available),
+				list_link,
+			),
+			title=_("Insufficient Leave Balance"),
+		)
+
+
+def _ensure_holiday_list_for_leave(employee, attendance_date):
+	"""Leave Application ledger creation requires a Holiday List for the employee/company."""
+	from hrms.utils.holiday_list import get_holiday_list_for_employee
+
+	if get_holiday_list_for_employee(employee, raise_exception=False, as_on=attendance_date):
+		return
+
+	company = frappe.db.get_value("Employee", employee, "company")
+	matching = frappe.db.get_value(
+		"Holiday List",
+		{"from_date": ("<=", attendance_date), "to_date": (">=", attendance_date)},
+		"name",
+		order_by="creation desc",
+	)
+	if matching and company and not frappe.db.get_value("Company", company, "default_holiday_list"):
+		frappe.db.set_value("Company", company, "default_holiday_list", matching)
+		return
+
+	frappe.throw(
+		_(
+			"No Holiday List found for Employee {0} on {1}. "
+			"Assign a Holiday List on the Employee or set Company Default Holiday List first. "
+			"No attendance was marked."
+		).format(
+			frappe.bold(employee),
+			frappe.bold(frappe.format(attendance_date, {"fieldtype": "Date"})),
+		)
+	)
+
+
+def _create_leave_application_for_day(employee, attendance_date, leave_type):
+	"""Create and submit an Approved Leave Application for one day.
+
+	HRMS then deducts leave balance (Leave Ledger) and creates/links Attendance.
+	"""
+	from hrms.hr.doctype.leave_application.leave_application import get_employee_leave_approver
+
+	# Leave Application refuses submit when Present/WFH attendance already exists for the day.
+	blocking = frappe.db.get_value(
+		"Attendance",
+		{
+			"employee": employee,
+			"attendance_date": attendance_date,
+			"docstatus": 1,
+			"status": ["in", ["Present", "Work From Home"]],
+		},
+		["name", "status"],
+		as_dict=True,
+	)
+	if blocking:
+		old = frappe.get_doc("Attendance", blocking.name)
+		old.flags.ignore_permissions = True
+		old.cancel()
+
+	_ensure_holiday_list_for_leave(employee, attendance_date)
+
+	leave_approver = get_employee_leave_approver(employee) or frappe.session.user
+	if (
+		frappe.db.get_single_value("HR Settings", "leave_approver_mandatory_in_leave_application")
+		and not leave_approver
+	):
+		frappe.throw(
+			_("Leave Approver is required. Set a Leave Approver on Employee {0} or in the Department.").format(
+				frappe.bold(employee)
+			)
+		)
+
+	la = frappe.get_doc(
+		{
+			"doctype": "Leave Application",
+			"employee": employee,
+			"leave_type": leave_type,
+			"from_date": attendance_date,
+			"to_date": attendance_date,
+			"status": "Approved",
+			"posting_date": today(),
+			"company": frappe.db.get_value("Employee", employee, "company"),
+			"leave_approver": leave_approver,
+			"description": _("Marked from Worker Attendance"),
+			"follow_via_email": 0,
+		}
+	)
+	la.flags.ignore_permissions = True
+	la.insert()
+	la.submit()
+
+	attendance_name = frappe.db.get_value(
+		"Attendance",
+		{"employee": employee, "attendance_date": attendance_date, "docstatus": ["<", 2]},
+		"name",
+	)
+	if not attendance_name:
+		frappe.throw(
+			_("Leave Application {0} was submitted but Attendance was not created.").format(la.name)
+		)
+	return attendance_name
+
+
 def _preserve_half_day_status(doc, half_day_status):
 	"""HRMS Attendance.check_leave_record forces half_day_status=Absent when there is no leave.
 
@@ -317,13 +527,24 @@ def mark_attendance(
 	employment_type_location=None,
 	half_day_status=None,
 ):
-	"""Create (or update) the Attendance of an employee for one day."""
+	"""Create (or update) the Attendance of an employee for one day.
+
+	On Leave creates an Approved Leave Application so allocated leave balance is deducted.
+	"""
 	if status not in STATUSES:
 		frappe.throw(_("Invalid attendance status {0}").format(status))
 	attendance_date = getdate(attendance_date)
 	if attendance_date > getdate(today()):
 		frappe.throw(_("Attendance can not be marked for future dates"))
 	submit = cint(submit)
+
+	if status == "On Leave":
+		if not leave_type:
+			frappe.throw(_("Leave Type is required when Status is On Leave"))
+		if not frappe.db.exists("Leave Type", leave_type):
+			frappe.throw(_("Invalid Leave Type {0}").format(leave_type))
+	else:
+		leave_type = None
 
 	if status == "Half Day":
 		half_day_status = half_day_status or "Absent"
@@ -332,7 +553,7 @@ def mark_attendance(
 	else:
 		half_day_status = None
 
-	existing_fields = ["name", "docstatus", "status", "half_day_status"]
+	existing_fields = ["name", "docstatus", "status", "half_day_status", "leave_type", "leave_application"]
 	if _has_employment_type_location_field():
 		existing_fields.append("custom_employment_type_location")
 	existing = frappe.db.get_value(
@@ -341,6 +562,34 @@ def mark_attendance(
 		existing_fields,
 		as_dict=True,
 	)
+
+	if status == "On Leave":
+		same_leave = (
+			existing
+			and existing.status == "On Leave"
+			and (existing.get("leave_type") or None) == leave_type
+			and (
+				existing.get("leave_application")
+				or _get_approved_leave_application(employee, attendance_date, leave_type)
+			)
+		)
+		if same_leave:
+			return existing.name
+
+		# Validate before changing anything so a failed leave mark never creates/cancels attendance.
+		_validate_leave_allocation(employee, leave_type, attendance_date)
+		_ensure_holiday_list_for_leave(employee, attendance_date)
+		_clear_day_for_leave_change(employee, attendance_date, existing)
+		return _create_leave_application_for_day(employee, attendance_date, leave_type)
+
+	# Leaving an On Leave day: cancel Leave Application first (restores balance).
+	if existing and (
+		existing.status == "On Leave"
+		or existing.get("leave_application")
+		or _get_approved_leave_application(employee, attendance_date)
+	):
+		_clear_day_for_leave_change(employee, attendance_date, existing)
+		existing = None
 
 	amended_from = None
 	if existing and existing.docstatus == 1:
@@ -367,7 +616,8 @@ def mark_attendance(
 		doc.amended_from = amended_from
 
 	doc.status = status
-	doc.leave_type = (leave_type or "Leave Without Pay") if status == "On Leave" else None
+	doc.leave_type = None
+	doc.leave_application = None
 	doc.half_day_status = half_day_status
 	_apply_employment_type_location(doc, status, employment_type_location)
 	if status == "Half Day":

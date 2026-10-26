@@ -604,7 +604,6 @@ class AttendanceSheet {
 					fieldtype: "Link",
 					label: __("Leave Type"),
 					options: "Leave Type",
-					default: "Leave Without Pay",
 					hidden: 1,
 				},
 				{ fieldname: "existing_html", fieldtype: "HTML" },
@@ -662,6 +661,9 @@ class AttendanceSheet {
 			$picker.find("button").removeClass("active").filter(`[data-status="${s}"]`).addClass("active");
 			d.set_df_property("leave_type", "hidden", s !== "On Leave");
 			d.set_df_property("leave_type", "reqd", s === "On Leave");
+			if (s !== "On Leave") {
+				d.set_value("leave_type", "");
+			}
 			const needs_location = LOCATION_STATUSES.includes(s);
 			d.set_df_property("employment_type_location", "hidden", needs_location ? 0 : 1);
 			d.set_df_property("employment_type_location", "reqd", needs_location ? 1 : 0);
@@ -687,6 +689,7 @@ class AttendanceSheet {
 			if (a?.status === "Half Day") {
 				set_half_day_status(a.half_day_status || "Absent");
 			}
+			d.set_value("leave_type", a?.status === "On Leave" && a.leave_type ? a.leave_type : "");
 			const loc_txt =
 				a && LOCATION_STATUSES.includes(a.status) && a.employment_type_location
 					? ` · ${__(a.employment_type_location)}`
@@ -695,10 +698,12 @@ class AttendanceSheet {
 				a?.status === "Half Day" && a.half_day_status
 					? ` · ${__("Other half")}: ${__(a.half_day_status)}`
 					: "";
+			const leave_txt =
+				a?.status === "On Leave" && a.leave_type ? ` · ${esc(a.leave_type)}` : "";
 			d.fields_dict.existing_html.$wrapper.html(
 				a
 					? `<div class="att-existing">${frappe.utils.icon("info", "sm")}
-						${__("Already marked as {0}", [`<b>${__(a.status)}${esc(loc_txt)}${esc(half_txt)}</b>`])}
+						${__("Already marked as {0}", [`<b>${__(a.status)}${esc(loc_txt)}${esc(half_txt)}${leave_txt}</b>`])}
 						(${a.docstatus === 0 ? __("Draft") : __("Submitted")}) ·
 						<a href="${frappe.utils.get_form_link("Attendance", a.name)}" target="_blank">${esc(a.name)}</a>
 						${a.docstatus === 1 ? `<br>${__("Choosing a different status will cancel and amend it.")}` : ""}</div>`
@@ -718,6 +723,14 @@ class AttendanceSheet {
 					message: __(
 						"Employment Type Location is required for Present and Half Day. Please select Office, Site Location, or Base."
 					),
+				});
+				return;
+			}
+			if (status === "On Leave" && !values.leave_type) {
+				frappe.msgprint({
+					title: __("Leave Type Required"),
+					indicator: "red",
+					message: __("Please select a Leave Type (for example Annual Leave)."),
 				});
 				return;
 			}
@@ -837,7 +850,6 @@ class AttendanceSheet {
 				fieldtype: "Link",
 				label: __("Leave Type"),
 				options: "Leave Type",
-				default: "Leave Without Pay",
 				depends_on: "eval:doc.status=='On Leave'",
 				mandatory_depends_on: "eval:doc.status=='On Leave'",
 			},
@@ -849,6 +861,14 @@ class AttendanceSheet {
 			fields,
 			primary_action_label: __("Mark Attendance"),
 			primary_action: (v) => {
+				if (v.status === "On Leave" && !v.leave_type) {
+					frappe.msgprint({
+						title: __("Leave Type Required"),
+						indicator: "red",
+						message: __("Please select a Leave Type (for example Annual Leave)."),
+					});
+					return;
+				}
 				const finish = (r) => {
 					d.hide();
 					const { marked, skipped, failed } = r.message;
