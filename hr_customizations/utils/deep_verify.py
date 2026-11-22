@@ -158,18 +158,11 @@ def run() -> dict:
 		else:
 			_ok(f"internal {key}")
 
-	# Desktop Icon
-	icon = frappe.get_doc("Desktop Icon", "Attendance Page")
-	if icon.link_type == "External" and (icon.link or "").endswith("emppage"):
-		_ok("desktop icon link")
+	# Desktop Icon intentionally not used
+	if frappe.db.exists("Desktop Icon", "Attendance Page"):
+		_fail("Desktop Icon Attendance Page should be removed")
 	else:
-		_fail(f"desktop icon {icon.link_type} {icon.link}")
-	roles = {r.role for r in icon.roles}
-	for role in ("HR Manager", "HR User", "System Manager"):
-		if role not in roles:
-			_fail(f"icon role missing {role}")
-		else:
-			_ok(f"icon role {role}")
+		_ok("desktop icon absent")
 
 	# Hooks
 	hooks = frappe.get_hooks("after_migrate") or []

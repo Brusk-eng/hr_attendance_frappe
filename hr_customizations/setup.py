@@ -124,11 +124,11 @@ def ensure_attendance_page_in_sidebar():
 def after_install():
 	ensure_attendance_page_in_sidebar()
 	try:
-		from hr_customizations.desk_setup import ensure_desktop_icon
+		from hr_customizations.desk_setup import remove_desktop_icon
 
-		ensure_desktop_icon()
+		remove_desktop_icon()
 	except Exception:
-		frappe.log_error(title="hr_customizations desktop icon install")
+		frappe.log_error(title="hr_customizations desktop icon cleanup")
 
 
 def after_migrate():
@@ -136,3 +136,4 @@ def after_migrate():
 
 	add_indexes()
 	ensure_attendance_page_in_sidebar()
+

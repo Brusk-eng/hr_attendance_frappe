@@ -27,8 +27,7 @@ It suits labour teams who work every day of the month (no weekends, no half days
 - Employee Connections already include Attendance (verified only; no duplicate override)
 
 ### Other
-- Desktop Icon **Attendance Page** → `/app/emppage` (HR Manager / HR User / System Manager)
-- Sidebar: Shift & Attendance → Attendance Page
+- Sidebar: Shift & Attendance → Attendance Page (no Desktop Icon)
 - Translations: **Arabic** (`ar`) and **Urdu** (`ur`), RTL supported
 - Index `(attendance_date, status)` on migrate
 - Access: HR Manager, HR User, System Manager

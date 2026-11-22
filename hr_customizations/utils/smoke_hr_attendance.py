@@ -52,15 +52,11 @@ def run() -> dict:
 	else:
 		_fail("Employee Checkin missing from Connections", report)
 
-	# Desktop Icon
+	# Desktop Icon intentionally not used (sidebar + search only)
 	if frappe.db.exists("Desktop Icon", "Attendance Page"):
-		icon = frappe.get_doc("Desktop Icon", "Attendance Page")
-		if icon.link_type == "External" and (icon.link or "").endswith("emppage"):
-			_ok("Desktop Icon Attendance Page → /app/emppage", report)
-		else:
-			_fail(f"Desktop Icon misconfigured: {icon.link_type} {icon.link}", report)
+		_fail("Desktop Icon Attendance Page should be removed", report)
 	else:
-		_fail("Desktop Icon Attendance Page missing", report)
+		_ok("Desktop Icon Attendance Page absent", report)
 
 	# Sidebar
 	if frappe.db.exists("Sidebar", "Shift & Attendance"):
