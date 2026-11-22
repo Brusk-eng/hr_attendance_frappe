@@ -6,29 +6,39 @@ from frappe.utils import add_days, cint, flt, getdate, today
 
 STATUSES = ("Present", "Absent", "On Leave", "Half Day", "Work From Home")
 PAGE_LENGTH = 100
+PHONE_PAGE_LENGTH = 25
 
 
-def _employee_filters(search=None, employee=None):
+def _employee_filters(search=None, employee=None, company=None):
 	filters = {"status": "Active"}
 	if employee:
 		filters["name"] = employee
+	if company:
+		filters["company"] = company
 	or_filters = None
 	if search:
 		or_filters = {"employee_name": ["like", f"%{search}%"], "name": ["like", f"%{search}%"]}
 	return filters, or_filters
 
 
+def _clamp_page_length(page_length=None):
+	length = cint(page_length) if page_length not in (None, "") else PAGE_LENGTH
+	return max(1, min(length, PAGE_LENGTH))
+
+
 @frappe.whitelist()
-def get_monthly_attendance(year, month, search=None, start=0):
-	"""Employees (100 per page) with their attendance for the given month."""
+def get_monthly_attendance(year, month, search=None, start=0, company=None, page_length=None):
+	"""Employees (paged) with their attendance for the given month."""
 	frappe.has_permission("Attendance", "read", throw=True)
 
 	year, month, start = cint(year), cint(month), cint(start)
+	page_length = _clamp_page_length(page_length)
+	company = (company or "").strip() or None
 	days_in_month = calendar.monthrange(year, month)[1]
 	from_date = getdate(f"{year}-{month:02d}-01")
 	to_date = getdate(f"{year}-{month:02d}-{days_in_month:02d}")
 
-	filters, or_filters = _employee_filters(search)
+	filters, or_filters = _employee_filters(search, company=company)
 	# All matching employees (name + display name) so we can sort marked-first across pages.
 	all_employees = frappe.get_list(
 		"Employee",
@@ -60,7 +70,7 @@ def get_monthly_attendance(year, month, search=None, start=0):
 	all_employees.sort(
 		key=lambda e: (0 if e.name in marked_employees else 1, (e.employee_name or e.name or "").lower())
 	)
-	page_names = [e.name for e in all_employees[start : start + PAGE_LENGTH]]
+	page_names = [e.name for e in all_employees[start : start + page_length]]
 
 	employees = []
 	if page_names:
@@ -208,9 +218,11 @@ def get_monthly_attendance(year, month, search=None, start=0):
 		"day_location_counts": day_location_counts,
 		"employees": employees,
 		"total": total,
-		"page_length": PAGE_LENGTH,
+		"page_length": page_length,
+		"company": company,
 		"days_in_month": days_in_month,
 		"working_days": working_days,
+		"has_more": start + len(employees) < total,
 	}
 
 
@@ -629,6 +641,41 @@ def mark_attendance(
 
 
 @frappe.whitelist()
+def get_unmarked_employees(attendance_date, search=None, company=None):
+	"""Active employees matching filters who have no Attendance on the given date.
+
+	Used by Bulk Mark confirm (especially phone infinite scroll — not limited to one page).
+	"""
+	frappe.has_permission("Attendance", "read", throw=True)
+	attendance_date = getdate(attendance_date)
+	company = (company or "").strip() or None
+	filters, or_filters = _employee_filters(search, company=company)
+	employees = frappe.get_list(
+		"Employee",
+		filters=filters,
+		or_filters=or_filters,
+		pluck="name",
+		limit_page_length=0,
+	)
+	if not employees:
+		return {"employees": [], "count": 0, "company": company}
+
+	marked = set(
+		frappe.get_all(
+			"Attendance",
+			filters={
+				"employee": ["in", employees],
+				"attendance_date": attendance_date,
+				"docstatus": ["<", 2],
+			},
+			pluck="employee",
+		)
+	)
+	unmarked = [e for e in employees if e not in marked]
+	return {"employees": unmarked, "count": len(unmarked), "company": company}
+
+
+@frappe.whitelist()
 def mark_bulk_attendance(
 	employees,
 	attendance_date,
@@ -728,7 +775,7 @@ def submit_attendance(names):
 
 
 @frappe.whitelist()
-def get_attendance_summary(from_date, to_date, employee=None):
+def get_attendance_summary(from_date, to_date, employee=None, company=None):
 	"""Attendance status counts for a period, overall and per employee."""
 	frappe.has_permission("Attendance", "read", throw=True)
 	from_date, to_date = getdate(from_date), getdate(to_date)
@@ -736,6 +783,9 @@ def get_attendance_summary(from_date, to_date, employee=None):
 		frappe.throw(_("From Date can not be after To Date"))
 
 	filters = {"attendance_date": ["between", [from_date, to_date]], "docstatus": 1}
+	company = (company or "").strip() or None
+	if company:
+		filters["company"] = company
 	if employee:
 		filters["employee"] = employee
 

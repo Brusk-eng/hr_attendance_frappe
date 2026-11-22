@@ -25,6 +25,8 @@ const STATUS_META = {
 const status_color = (s) => STATUS_META[s].color;
 const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
 const abbr = (s) => __(STATUS_META[s]?.abbr || "?", null, "Attendance Abbreviation");
+const is_phone = () => window.matchMedia("(max-width: 768px)").matches;
+const sheet_page_length = () => (is_phone() ? 25 : 100);
 const cell_label = (status, location) => {
 	if (status === "Present" && location && LOCATION_ABBR[location]) {
 		return LOCATION_ABBR[location];
@@ -86,6 +88,7 @@ class EmpAttendancePage {
 		this.page.clear_secondary_action();
 		this.page.clear_inner_toolbar();
 		this.page.add_inner_button(__("New Employee"), () => frappe.new_doc("Employee"));
+		this.teardown_sticky_bar();
 
 		if (view === "report") {
 			this.page.set_title(__("Attendance Dashboard"));
@@ -96,12 +99,46 @@ class EmpAttendancePage {
 			else this.report.refresh(true);
 		} else {
 			this.page.set_title(__("Worker Attendance"));
-			this.page.set_primary_action(__("Bulk Mark"), () => this.sheet.bulk_dialog(), "users");
-			this.page.set_secondary_action(__("Submit Drafts"), () => this.sheet.submit_drafts(), "check");
 			this.$report.hide();
 			this.$sheet.show();
-			if (!this.sheet) this.sheet = new AttendanceSheet(this.$sheet);
+			if (!this.sheet) this.sheet = new AttendanceSheet(this.$sheet, this);
 			else this.sheet.refresh();
+			this.sync_sheet_actions();
+		}
+	}
+
+	sync_sheet_actions() {
+		this.page.clear_primary_action();
+		this.page.clear_secondary_action();
+		if (!this.sheet) return;
+		if (is_phone()) {
+			this.mount_sticky_bar();
+			return;
+		}
+		this.teardown_sticky_bar();
+		this.page.set_primary_action(__("Bulk Mark"), () => this.sheet.bulk_dialog(), "users");
+		this.page.set_secondary_action(__("Submit Drafts"), () => this.sheet.submit_drafts(), "check");
+	}
+
+	mount_sticky_bar() {
+		if (this.$sticky && this.$sticky.length) return;
+		$(this.page.wrapper).addClass("emppage-has-sticky");
+		this.$sticky = $(`
+			<div class="att-sticky-bar" role="toolbar">
+				<button type="button" class="btn btn-primary btn-sm act-bulk">${__("Bulk")}</button>
+				<button type="button" class="btn btn-default btn-sm act-submit">${__("Submit")}</button>
+				<button type="button" class="btn btn-default btn-sm act-new">${__("New")}</button>
+			</div>`).appendTo(this.page.wrapper);
+		this.$sticky.find(".act-bulk").on("click", () => this.sheet && this.sheet.bulk_dialog());
+		this.$sticky.find(".act-submit").on("click", () => this.sheet && this.sheet.submit_drafts());
+		this.$sticky.find(".act-new").on("click", () => frappe.new_doc("Employee"));
+	}
+
+	teardown_sticky_bar() {
+		$(this.page.wrapper).removeClass("emppage-has-sticky");
+		if (this.$sticky) {
+			this.$sticky.remove();
+			this.$sticky = null;
 		}
 	}
 }
@@ -120,13 +157,18 @@ function avatar(name) {
 /* ---------------------------------------------------------------- sheet */
 
 class AttendanceSheet {
-	constructor($wrapper) {
+	constructor($wrapper, page_ctrl = null) {
 		this.$wrapper = $wrapper;
+		this.page_ctrl = page_ctrl;
 		const now = moment(frappe.datetime.get_today());
 		this.year = now.year();
 		this.month = now.month() + 1;
 		this.start = 0;
 		this.search = "";
+		this.company = frappe.defaults.get_user_default("Company") || frappe.boot?.sysdefaults?.company || "";
+		this.page_length = sheet_page_length();
+		this._loading_more = false;
+		this._all_employees = [];
 		/** @type {Set<string>} keys: `${employee}::${yyyy-mm-dd}` */
 		this.selected = new Set();
 		this._painting = false;
@@ -135,6 +177,18 @@ class AttendanceSheet {
 		this._suppress_click = false;
 		this._paint_start = null;
 		$(document).on("mouseup.emppageSel", () => this.end_paint());
+		$(window).on(
+			"resize.emppageSheet",
+			frappe.utils.debounce(() => {
+				const next = sheet_page_length();
+				if (next !== this.page_length) {
+					this.page_length = next;
+					this.start = 0;
+					this.refresh();
+				}
+				this.page_ctrl && this.page_ctrl.sync_sheet_actions();
+			}, 200)
+		);
 		this.make();
 		this.refresh();
 	}
@@ -304,6 +358,25 @@ class AttendanceSheet {
 		this.month_field.set_value(String(this.month));
 		this.year_field.set_value(String(this.year));
 
+		this.company_field = frappe.ui.form.make_control({
+			parent: $f,
+			df: {
+				fieldtype: "Link",
+				options: "Company",
+				label: __("Company"),
+				placeholder: __("All Companies"),
+				change: () => {
+					const v = this.company_field.get_value() || "";
+					if (v === this.company) return;
+					this.company = v;
+					this.start = 0;
+					this.refresh();
+				},
+			},
+			render_input: true,
+		});
+		if (this.company) this.company_field.set_value(this.company);
+
 		this.search_field = frappe.ui.form.make_control({
 			parent: $f,
 			df: { fieldtype: "Data", label: __("Search Employee"), placeholder: __("Employee name or ID") },
@@ -340,21 +413,44 @@ class AttendanceSheet {
 		this.refresh();
 	}
 
-	refresh() {
-		this.clear_selection();
-		this.$wrapper.find(".att-scroll").css("opacity", 0.5);
+	refresh(opts = {}) {
+		const append = !!opts.append;
+		if (!append) {
+			this.clear_selection();
+			this._all_employees = [];
+		}
+		this.$wrapper.find(".att-scroll").css("opacity", append ? 1 : 0.5);
 		return frappe
 			.call(`${API}.get_monthly_attendance`, {
 				year: this.year,
 				month: this.month,
 				search: this.search,
 				start: this.start,
+				company: this.company || null,
+				page_length: this.page_length,
 			})
 			.then((r) => {
-				this.data = r.message;
+				const msg = r.message || {};
+				if (append && this.data) {
+					this._all_employees = this._all_employees.concat(msg.employees || []);
+					this.data = { ...this.data, ...msg, employees: this._all_employees };
+				} else {
+					this._all_employees = msg.employees || [];
+					this.data = msg;
+				}
 				this.render();
 			})
-			.always(() => this.$wrapper.find(".att-scroll").css("opacity", 1));
+			.always(() => {
+				this._loading_more = false;
+				this.$wrapper.find(".att-scroll").css("opacity", 1);
+			});
+	}
+
+	load_more() {
+		if (!this.data?.has_more || this._loading_more) return;
+		this._loading_more = true;
+		this.start = this._all_employees.length;
+		this.refresh({ append: true });
 	}
 
 	date_str(day) {
@@ -363,8 +459,7 @@ class AttendanceSheet {
 
 	render() {
 		this.render_kpis();
-		const { employees, days_in_month, total, page_length, working_days } = this.data;
-		const today = frappe.datetime.get_today();
+		const { employees, total, page_length, working_days } = this.data;
 		const $scroll = this.$wrapper.find(".att-scroll");
 		this.$wrapper
 			.find(".sheet-head .title")
@@ -377,6 +472,123 @@ class AttendanceSheet {
 			this.$wrapper.find(".att-pager").empty();
 			return;
 		}
+
+		if (is_phone()) {
+			this.render_phone_list($scroll, employees, total);
+			return;
+		}
+		this.render_desktop_grid($scroll, employees, total, page_length);
+	}
+
+	render_phone_list($scroll, employees, total) {
+		const today = frappe.datetime.get_today();
+		const cards = employees
+			.map((emp) => {
+				const t = emp.totals || {};
+				const rate = t.working_days ? Math.round((t.present * 100) / t.working_days) : 0;
+				const a = (emp.attendance || {})[today];
+				let today_chip = `<span class="chip empty"></span>`;
+				if (a) {
+					const meta = STATUS_META[a.status] || { cls: "c-none" };
+					today_chip = `<span class="chip ${meta.cls}${a.docstatus === 0 ? " draft" : ""}">${esc(
+						cell_label(a.status, a.employment_type_location)
+					)}</span>`;
+				}
+				return `<button type="button" class="att-emp-card" data-employee="${esc(emp.name)}">
+					${avatar(emp.employee_name || emp.name)}
+					<div class="meta">
+						<div class="nm">${esc(emp.employee_name || emp.name)}</div>
+						<div class="id">${esc(emp.name)}${emp.designation ? " · " + esc(__(emp.designation)) : ""}</div>
+						<div class="stats">${__("Present")} ${t.present || 0} · ${__("Absent")} ${t.absent || 0} · ${__(
+					"Leave"
+				)} ${t.leave || 0} · ${rate}%</div>
+					</div>
+					<div class="today-mark" title="${__("Today")}">${today_chip}</div>
+				</button>`;
+			})
+			.join("");
+
+		const has_more = !!this.data.has_more;
+		$scroll.html(`
+			<div class="att-phone-list">${cards}</div>
+			${
+				has_more
+					? `<div class="att-load-more"><button type="button" class="btn btn-default btn-sm btn-load-more">${__(
+							"Load more"
+					  )}</button></div>`
+					: `<div class="att-pager-note">${__("Showing {0} of {1} employees", [employees.length, total])}</div>`
+			}
+		`);
+		$scroll.find(".att-emp-card").on("click", (e) => {
+			const emp = $(e.currentTarget).attr("data-employee");
+			this.open_phone_day_sheet(emp);
+		});
+		$scroll.find(".btn-load-more").on("click", () => this.load_more());
+		this.$wrapper.find(".att-pager").empty();
+		this.$wrapper.find(".att-selection-bar").addClass("hidden");
+		this.bind_phone_infinite($scroll);
+	}
+
+	bind_phone_infinite($scroll) {
+		$scroll.off("scroll.emppageInf");
+		$scroll.on(
+			"scroll.emppageInf",
+			frappe.utils.debounce(() => {
+				if (!is_phone() || !this.data?.has_more || this._loading_more) return;
+				const el = $scroll[0];
+				if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) this.load_more();
+			}, 120)
+		);
+	}
+
+	open_phone_day_sheet(employee) {
+		const emp = (this.data?.employees || []).find((e) => e.name === employee);
+		if (!emp) return;
+		const today = frappe.datetime.get_today();
+		const days = this.data.days_in_month || 0;
+		const rows = [];
+		for (let d = 1; d <= days; d++) {
+			const ds = this.date_str(d);
+			if (ds > today) continue;
+			const a = (emp.attendance || {})[ds];
+			const cal = (emp.calendar || {})[ds];
+			const is_off = cal === "Holiday" || cal === "Weekly Off";
+			let chip = `<span class="chip empty"></span>`;
+			let label = __("Not Marked");
+			if (a) {
+				const meta = STATUS_META[a.status] || { cls: "c-none" };
+				chip = `<span class="chip ${meta.cls}${a.docstatus === 0 ? " draft" : ""}">${esc(
+					cell_label(a.status, a.employment_type_location)
+				)}</span>`;
+				label = cell_title(a.status, a.employment_type_location, a.docstatus === 0);
+			} else if (is_off) {
+				chip = `<span class="chip ${STATUS_META[cal].cls}">${esc(STATUS_META[cal].abbr)}</span>`;
+				label = __(cal);
+			}
+			rows.push(`<button type="button" class="att-day-row${is_off ? " day-off" : ""}" data-date="${ds}" ${
+				is_off ? "disabled" : ""
+			}>
+				<span class="d">${esc(frappe.datetime.str_to_user(ds))}</span>
+				<span class="l">${esc(label)}</span>
+				${chip}
+			</button>`);
+		}
+		const d = new frappe.ui.Dialog({
+			title: emp.employee_name || emp.name,
+			fields: [{ fieldname: "days_html", fieldtype: "HTML" }],
+		});
+		d.fields_dict.days_html.$wrapper.html(`<div class="att-day-list">${rows.join("")}</div>`);
+		d.fields_dict.days_html.$wrapper.find(".att-day-row:not([disabled])").on("click", (e) => {
+			const date = $(e.currentTarget).attr("data-date");
+			d.hide();
+			this.open_dialog(employee, date);
+		});
+		d.show();
+	}
+
+	render_desktop_grid($scroll, employees, total, page_length) {
+		const today = frappe.datetime.get_today();
+		const days_in_month = this.data.days_in_month;
 
 		let head = `<th class="col-emp"><span title="${__(
 			"Tick employee = select all days in that row"
@@ -474,8 +686,9 @@ class AttendanceSheet {
 			this.set_row_selection(emp, e.currentTarget.checked);
 		});
 		const $days = $scroll.find("td.day:not(.future)");
+		// Drag-paint is desktop-only (conflicts with phone scroll).
 		$days.on("mousedown", (e) => {
-			if (e.button !== 0) return;
+			if (e.button !== 0 || is_phone()) return;
 			e.preventDefault();
 			const $td = $(e.currentTarget);
 			const emp = $td.closest("tr").attr("data-employee");
@@ -510,14 +723,16 @@ class AttendanceSheet {
 		this.sync_row_checks();
 		this.update_selection_bar();
 
-		// scroll today's column into view
 		const $today = $scroll.find("th.today");
 		if ($today.length) {
 			const left = $today[0].offsetLeft - $scroll.width() / 2;
 			$scroll.scrollLeft(left > 0 ? left : 0);
 		}
 
-		this.render_pager(this.start + 1, this.start + employees.length, total, page_length);
+		// Desktop pager uses current window (not appended).
+		const from = this.start + 1;
+		const to = this.start + (this.data.employees?.length || 0);
+		this.render_pager(from, Math.min(to, total), total, page_length);
 	}
 
 	render_kpis() {
@@ -780,8 +995,6 @@ class AttendanceSheet {
 
 	bulk_dialog(opts = {}) {
 		const use_selection = opts.use_selection || this.selected.size > 0;
-		const employees = (this.data?.employees || []).map((e) => e.name);
-		if (!use_selection && !employees.length) return;
 		if (use_selection && !this.selected.size) {
 			frappe.msgprint(
 				__("Hold & drag across days (or use the employee checkbox), then Mark Selected.")
@@ -790,138 +1003,169 @@ class AttendanceSheet {
 		}
 		const today = frappe.datetime.get_today();
 		const selected_cells = [...this.selected].map((k) => this.parse_cell_key(k));
-		const fields = [
-			{
-				fieldtype: "HTML",
-				options: use_selection
-					? `<div class="att-existing">${__(
-							"Will mark {0} selected employee-day cell(s). Already marked cells are skipped.",
-							[selected_cells.length]
-					  )}</div>`
-					: `<div class="att-existing">${__(
-							"Marks every employee shown on this page ({0}) who is not yet marked on the selected date. Already marked employees are skipped. Tip: hold & drag on the sheet to select cells for multi-day bulk mark.",
-							[employees.length]
-					  )}</div>`,
-			},
-		];
-		if (!use_selection) {
-			fields.push({
-				fieldname: "attendance_date",
-				fieldtype: "Date",
-				label: __("Date"),
-				reqd: 1,
-				default: today,
-				max_date: frappe.datetime.str_to_obj(today),
-			});
-		}
-		fields.push(
-			{
-				fieldname: "status",
-				fieldtype: "Select",
-				label: __("Status"),
-				reqd: 1,
-				options: MARK_STATUSES.map((s) => ({ label: __(s), value: s })),
-				default: "Present",
-			},
-			{
-				fieldname: "employment_type_location",
-				fieldtype: "Select",
-				label: __("Employment Type Location"),
-				options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
-				default: "Base",
-				depends_on: "eval:['Present','Half Day'].includes(doc.status)",
-				mandatory_depends_on: "eval:['Present','Half Day'].includes(doc.status)",
-				description: __(
-					"Required for Present and Half Day (not Work From Home). Used for Salary Slip day calculation when TRS is installed."
-				),
-			},
-			{
-				fieldname: "half_day_status",
-				fieldtype: "Select",
-				label: __("Status for Other Half"),
-				options: HALF_DAY_OTHER_OPTIONS,
-				default: "Absent",
-				depends_on: "eval:doc.status=='Half Day'",
-				mandatory_depends_on: "eval:doc.status=='Half Day'",
-				description: __("What the other half of the day counts as when status is Half Day."),
-			},
-			{
-				fieldname: "leave_type",
-				fieldtype: "Link",
-				label: __("Leave Type"),
-				options: "Leave Type",
-				depends_on: "eval:doc.status=='On Leave'",
-				mandatory_depends_on: "eval:doc.status=='On Leave'",
-			},
-			{ fieldname: "submit", fieldtype: "Check", label: __("Submit Immediately"), default: 1 }
-		);
 
-		const d = new frappe.ui.Dialog({
-			title: __("Bulk Mark Attendance"),
-			fields,
-			primary_action_label: __("Mark Attendance"),
-			primary_action: (v) => {
-				if (v.status === "On Leave" && !v.leave_type) {
-					frappe.msgprint({
-						title: __("Leave Type Required"),
-						indicator: "red",
-						message: __("Please select a Leave Type (for example Annual Leave)."),
-					});
-					return;
-				}
-				const finish = (r) => {
-					d.hide();
-					const { marked, skipped, failed } = r.message;
-					frappe.msgprint({
-						title: __("Bulk Mark Attendance"),
-						indicator: failed.length ? "orange" : "green",
-						message:
-							__("{0} marked, {1} already marked (skipped).", [marked, skipped]) +
-							(failed.length ? `<br>${__("Failed")}: ${failed.map(esc).join(", ")}` : ""),
-					});
-					this.refresh();
-				};
-				if (use_selection) {
+		const open_with_count = (unmarked_count) => {
+			const fields = [
+				{
+					fieldtype: "HTML",
+					options: use_selection
+						? `<div class="att-existing">${__(
+								"Will mark {0} selected employee-day cell(s). Already marked cells are skipped.",
+								[selected_cells.length]
+						  )}</div>`
+						: `<div class="att-existing">${__(
+								"Marks {0} unmarked employee(s) matching current filters (company + search) on the selected date. Already marked employees are skipped.",
+								[unmarked_count]
+						  )}</div>`,
+				},
+			];
+			if (!use_selection) {
+				fields.push({
+					fieldname: "attendance_date",
+					fieldtype: "Date",
+					label: __("Date"),
+					reqd: 1,
+					default: today,
+					max_date: frappe.datetime.str_to_obj(today),
+				});
+			}
+			fields.push(
+				{
+					fieldname: "status",
+					fieldtype: "Select",
+					label: __("Status"),
+					reqd: 1,
+					options: MARK_STATUSES.map((s) => ({ label: __(s), value: s })),
+					default: "Present",
+				},
+				{
+					fieldname: "employment_type_location",
+					fieldtype: "Select",
+					label: __("Employment Type Location"),
+					options: EMPLOYMENT_TYPE_LOCATION_OPTIONS,
+					default: "Base",
+					depends_on: "eval:['Present','Half Day'].includes(doc.status)",
+					mandatory_depends_on: "eval:['Present','Half Day'].includes(doc.status)",
+					description: __(
+						"Required for Present and Half Day (not Work From Home). Used for Salary Slip day calculation when TRS is installed."
+					),
+				},
+				{
+					fieldname: "half_day_status",
+					fieldtype: "Select",
+					label: __("Status for Other Half"),
+					options: HALF_DAY_OTHER_OPTIONS,
+					default: "Absent",
+					depends_on: "eval:doc.status=='Half Day'",
+					mandatory_depends_on: "eval:doc.status=='Half Day'",
+					description: __("What the other half of the day counts as when status is Half Day."),
+				},
+				{
+					fieldname: "leave_type",
+					fieldtype: "Link",
+					label: __("Leave Type"),
+					options: "Leave Type",
+					depends_on: "eval:doc.status=='On Leave'",
+					mandatory_depends_on: "eval:doc.status=='On Leave'",
+				},
+				{ fieldname: "submit", fieldtype: "Check", label: __("Submit Immediately"), default: 1 }
+			);
+
+			const d = new frappe.ui.Dialog({
+				title: __("Bulk Mark Attendance"),
+				fields,
+				primary_action_label: __("Mark Attendance"),
+				primary_action: (v) => {
+					if (v.status === "On Leave" && !v.leave_type) {
+						frappe.msgprint({
+							title: __("Leave Type Required"),
+							indicator: "red",
+							message: __("Please select a Leave Type (for example Annual Leave)."),
+						});
+						return;
+					}
+					const finish = (r) => {
+						d.hide();
+						const { marked, skipped, failed } = r.message;
+						frappe.msgprint({
+							title: __("Bulk Mark Attendance"),
+							indicator: failed.length ? "orange" : "green",
+							message:
+								__("{0} marked, {1} already marked (skipped).", [marked, skipped]) +
+								(failed.length ? `<br>${__("Failed")}: ${failed.map(esc).join(", ")}` : ""),
+						});
+						this.start = 0;
+						this.refresh();
+					};
+					if (use_selection) {
+						frappe
+							.call({
+								method: `${API}.mark_selected_attendance`,
+								args: {
+									cells: selected_cells,
+									status: v.status,
+									leave_type: v.leave_type,
+									employment_type_location: v.employment_type_location || null,
+									half_day_status: v.status === "Half Day" ? v.half_day_status : null,
+									submit: v.submit,
+								},
+								freeze: true,
+								freeze_message: __("Marking attendance..."),
+							})
+							.then(finish);
+						return;
+					}
+					if (v.attendance_date > today) {
+						frappe.msgprint(__("Attendance can not be marked for future dates"));
+						return;
+					}
 					frappe
-						.call({
-							method: `${API}.mark_selected_attendance`,
-							args: {
-								cells: selected_cells,
-								status: v.status,
-								leave_type: v.leave_type,
-								employment_type_location: v.employment_type_location || null,
-								half_day_status: v.status === "Half Day" ? v.half_day_status : null,
-								submit: v.submit,
-							},
-							freeze: true,
-							freeze_message: __("Marking attendance..."),
-						})
-						.then(finish);
-					return;
-				}
-				if (v.attendance_date > today) {
-					frappe.msgprint(__("Attendance can not be marked for future dates"));
-					return;
-				}
-				frappe
-					.call({
-						method: `${API}.mark_bulk_attendance`,
-						args: {
-							employees,
+						.call(`${API}.get_unmarked_employees`, {
 							attendance_date: v.attendance_date,
-							status: v.status,
-							leave_type: v.leave_type,
-							employment_type_location: v.employment_type_location || null,
-							half_day_status: v.status === "Half Day" ? v.half_day_status : null,
-							submit: v.submit,
-						},
-						freeze: true,
-						freeze_message: __("Marking attendance..."),
-					})
-					.then(finish);
-			},
-		});
-		d.show();
+							search: this.search,
+							company: this.company || null,
+						})
+						.then((ur) => {
+							const employees = ur.message?.employees || [];
+							if (!employees.length) {
+								frappe.msgprint(__("All matching employees are already marked for this date."));
+								return;
+							}
+							frappe.confirm(__("Mark {0} unmarked employee(s)?", [employees.length]), () => {
+								frappe
+									.call({
+										method: `${API}.mark_bulk_attendance`,
+										args: {
+											employees,
+											attendance_date: v.attendance_date,
+											status: v.status,
+											leave_type: v.leave_type,
+											employment_type_location: v.employment_type_location || null,
+											half_day_status: v.status === "Half Day" ? v.half_day_status : null,
+											submit: v.submit,
+										},
+										freeze: true,
+										freeze_message: __("Marking attendance..."),
+									})
+									.then(finish);
+							});
+						});
+				},
+			});
+			d.show();
+		};
+
+		if (use_selection) {
+			open_with_count(0);
+			return;
+		}
+		frappe
+			.call(`${API}.get_unmarked_employees`, {
+				attendance_date: today,
+				search: this.search,
+				company: this.company || null,
+			})
+			.then((r) => open_with_count(r.message?.count || 0));
 	}
 
 	submit_drafts() {
@@ -988,6 +1232,14 @@ class AttendanceDashboard {
 			change: on_change,
 		});
 		this.to_field = mk({ fieldtype: "Date", label: __("To Date"), default: today, change: on_change });
+		this.company_field = mk({
+			fieldtype: "Link",
+			options: "Company",
+			label: __("Company"),
+			placeholder: __("All Companies"),
+			default: frappe.defaults.get_user_default("Company") || frappe.boot?.sysdefaults?.company || "",
+			change: on_change,
+		});
 		this.mode_field = mk({
 			fieldtype: "Select",
 			label: __("Employees"),
@@ -1005,7 +1257,12 @@ class AttendanceDashboard {
 			fieldtype: "Link",
 			label: __("Employee"),
 			options: "Employee",
-			get_query: () => ({ filters: { status: "Active" } }),
+			get_query: () => {
+				const filters = { status: "Active" };
+				const company = this.company_field.get_value();
+				if (company) filters.company = company;
+				return { filters };
+			},
 			change: on_change,
 		});
 		this.employee_field.$wrapper.hide();
@@ -1036,6 +1293,7 @@ class AttendanceDashboard {
 		return {
 			from_date: this.from_field.get_value(),
 			to_date: this.to_field.get_value(),
+			company: this.company_field.get_value() || null,
 			employee: this.mode_field.get_value() === "one" ? this.employee_field.get_value() : null,
 		};
 	}

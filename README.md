@@ -10,36 +10,27 @@ It suits labour teams who work every day of the month (no weekends, no half days
 
 ## Features
 
-### Attendance Sheet (`/desk/emppage`)
-- Every active employee on one screen, **100 per page** with pagination
-- **Search** by employee name or ID (results update as you type)
-- Monthly grid: one cell per day, colour coded **P** (Present), **A** (Absent), **L** (On Leave). Drafts show with a dashed border
-- Totals per worker: working days, present, absent, leave, not marked, attendance %
-  - Every calendar day is a working day (no weekends), counted from the employee's joining date and up to today
-- Summary cards for today: total workers, present, absent, on leave, not marked
-- **Click a worker or a day cell** to open the *Mark Attendance* dialog:
-  - Date (today by default, future dates blocked)
-  - Status: Present / Absent / On Leave (*Half Day* and *Work From Home* are deliberately hidden)
-  - Leave Type for *On Leave* (default *Leave Without Pay*)
-  - **Submit Attendance** (create + submit) or **Save as Draft**
-  - Changing an already-submitted day cancels it and creates an amended record automatically
-- **Bulk Mark**: mark every not-yet-marked worker on the page in one go
-- **Submit Drafts**: submit all drafts on the page
-- **New Employee** shortcut
-- Month / year selector with previous / next / this-month navigation
+### Attendance Sheet (`/app/emppage`)
+- **Company** filter (defaults to your company) + **Search** by name/ID
+- Desktop: monthly grid, **100 per page**, hold-drag multi-select, Bulk / Submit in the page toolbar
+- Phone (≤768px): employee cards, **infinite scroll** (25 at a time), tap → day list → mark; sticky bottom bar (Bulk / Submit / New). Drag-paint disabled on phone
+- Statuses: Present / Absent / On Leave / Half Day / Work From Home (location Office/Site/Base when TRS field exists)
+- **Bulk Mark**: confirms count of unmarked employees matching current filters (not just the visible page)
+- Month / year navigation, drafts with dashed border, amend on change
 
-### Attendance Dashboard (`/desk/emppage/report`)
-- Filters: **From Date**, **To Date**, and **All Employees** or **One Employee** (Employee link field)
-- Quick ranges: This Month, Last Month, Last 30 Days
-- KPI cards: days in period, Present, Absent, On Leave, attendance rate
-- **Donut chart** of the status distribution, with exact numbers and percentages written underneath
-- **Stacked bar chart**: per employee (all employees) or per day (one employee)
-- Per-employee table with the count for each status, total and attendance %
+### Attendance Dashboard (`/app/emppage/report`)
+- In-page KPIs + donut / bar charts (classic ops view)
+- Desk **Attendance** Dashboard (HRMS) wired to Insights **Attendance Analytics** when Insights is installed (soft — Insights not required)
+
+### Connections
+- Attendance form: Employee Checkin + internal links (Attendance Request, Leave Application, Employee, Shift Type)
+- Employee Connections already include Attendance (verified only; no duplicate override)
 
 ### Other
-- Translations: **Arabic** (`ar`) and **Urdu** (`ur`), with RTL layout supported
-- Searchable from the desk search bar: type **"Attendance Page"**
-- Adds a composite index `(attendance_date, status)` on `tabAttendance` on every migrate (`after_migrate` hook) to speed up the dashboard queries
+- Desktop Icon **Attendance Page** → `/app/emppage` (HR Manager / HR User / System Manager)
+- Sidebar: Shift & Attendance → Attendance Page
+- Translations: **Arabic** (`ar`) and **Urdu** (`ur`), RTL supported
+- Index `(attendance_date, status)` on migrate
 - Access: HR Manager, HR User, System Manager
 
 ---
@@ -63,7 +54,7 @@ bench build --app hr_customizations
 bench restart                          # or restart `bench start` in development
 ```
 
-Then open `http://<your-site>/desk/emppage`, or search for **Attendance Page**.
+Then open `http://<your-site>/app/emppage`, or search for **Attendance Page**.
 
 ## Update
 

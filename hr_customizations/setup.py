@@ -123,6 +123,12 @@ def ensure_attendance_page_in_sidebar():
 
 def after_install():
 	ensure_attendance_page_in_sidebar()
+	try:
+		from hr_customizations.desk_setup import ensure_desktop_icon
+
+		ensure_desktop_icon()
+	except Exception:
+		frappe.log_error(title="hr_customizations desktop icon install")
 
 
 def after_migrate():

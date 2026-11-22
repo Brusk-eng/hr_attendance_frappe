@@ -1,0 +1,374 @@
+{
+ "charts": {
+  "attendance_analytics-attendance-detail-2": {
+   "chart_type": "Table",
+   "config": {
+    "columns": [],
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 200,
+    "order_by": [
+     {
+      "column": {
+       "column_name": "attendance_date",
+       "type": "column"
+      },
+      "direction": "desc"
+     }
+    ],
+    "rows": [
+     {
+      "column_name": "attendance",
+      "data_type": "String",
+      "dimension_name": "Attendance"
+     },
+     {
+      "column_name": "employee_name",
+      "data_type": "String",
+      "dimension_name": "Employee Name"
+     },
+     {
+      "column_name": "company",
+      "data_type": "String",
+      "dimension_name": "Company"
+     },
+     {
+      "column_name": "status",
+      "data_type": "String",
+      "dimension_name": "Status"
+     },
+     {
+      "column_name": "location",
+      "data_type": "String",
+      "dimension_name": "Location"
+     },
+     {
+      "column_name": "attendance_date",
+      "data_type": "Date",
+      "dimension_name": "Attendance Date"
+     },
+     {
+      "column_name": "department",
+      "data_type": "String",
+      "dimension_name": "Department"
+     }
+    ],
+    "values": []
+   },
+   "description": null,
+   "folder": null,
+   "info": null,
+   "name": "attendance_analytics-attendance-detail-2",
+   "query": "attendance_analytics-attendance-detail",
+   "sort_order": 3,
+   "title": "Attendance Detail",
+   "workbook": "attendance_analytics"
+  },
+  "attendance_analytics-by-company": {
+   "chart_type": "Bar",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 20,
+    "order_by": [],
+    "x_axis": {
+     "dimension": {
+      "column_name": "company",
+      "data_type": "String",
+      "dimension_name": "Company"
+     }
+    },
+    "y_axis": {
+     "series": [
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "attendance_count",
+        "data_type": "Integer",
+        "measure_name": "Records"
+       }
+      }
+     ]
+    }
+   },
+   "description": null,
+   "folder": null,
+   "info": null,
+   "name": "attendance_analytics-by-company",
+   "query": "attendance_analytics-company-counts",
+   "sort_order": 2,
+   "title": "By Company",
+   "workbook": "attendance_analytics"
+  },
+  "attendance_analytics-status-mix": {
+   "chart_type": "Donut",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 10,
+    "order_by": [],
+    "x_axis": {
+     "dimension": {
+      "column_name": "status",
+      "data_type": "String",
+      "dimension_name": "Status"
+     }
+    },
+    "y_axis": {
+     "series": [
+      {
+       "measure": {
+        "aggregation": "sum",
+        "column_name": "attendance_count",
+        "data_type": "Integer",
+        "measure_name": "Records"
+       }
+      }
+     ]
+    }
+   },
+   "description": null,
+   "folder": null,
+   "info": null,
+   "name": "attendance_analytics-status-mix",
+   "query": "attendance_analytics-status-counts",
+   "sort_order": 1,
+   "title": "Status Mix",
+   "workbook": "attendance_analytics"
+  },
+  "attendance_analytics-total-records": {
+   "chart_type": "Number",
+   "config": {
+    "filters": {
+     "filters": [],
+     "logical_operator": "And"
+    },
+    "limit": 100,
+    "number_column_options": [
+     {
+      "shorten_numbers": false
+     }
+    ],
+    "number_columns": [
+     {
+      "aggregation": "sum",
+      "column_name": "attendance_count",
+      "data_type": "Integer",
+      "id": "Records",
+      "measure_name": "Records"
+     }
+    ],
+    "order_by": [],
+    "sparkline": false
+   },
+   "description": null,
+   "folder": null,
+   "info": null,
+   "name": "attendance_analytics-total-records",
+   "query": "attendance_analytics-status-counts",
+   "sort_order": 0,
+   "title": "Total Records",
+   "workbook": "attendance_analytics"
+  }
+ },
+ "creation": "2026-11-22 14:27:07.427523",
+ "dashboards": {
+  "attendance_analytics-attendance-analytics": {
+   "items": [
+    {
+     "filter_name": "Status",
+     "filter_type": "String",
+     "icon": "check",
+     "layout": {
+      "h": 1,
+      "i": "f-status",
+      "w": 4,
+      "x": 0,
+      "y": 0
+     },
+     "links": {
+      "attendance_analytics-attendance-detail-2": "`attendance_analytics-attendance-detail`.`status`",
+      "attendance_analytics-status-mix": "`attendance_analytics-status-counts`.`status`",
+      "attendance_analytics-total-records": "`attendance_analytics-status-counts`.`status`"
+     },
+     "type": "filter"
+    },
+    {
+     "filter_name": "Company",
+     "filter_type": "String",
+     "icon": "building",
+     "layout": {
+      "h": 1,
+      "i": "f-co",
+      "w": 4,
+      "x": 4,
+      "y": 0
+     },
+     "links": {
+      "attendance_analytics-attendance-detail-2": "`attendance_analytics-attendance-detail`.`company`",
+      "attendance_analytics-by-company": "`attendance_analytics-company-counts`.`company`"
+     },
+     "type": "filter"
+    },
+    {
+     "filter_name": "Employee",
+     "filter_type": "String",
+     "icon": "user",
+     "layout": {
+      "h": 1,
+      "i": "f-emp",
+      "w": 4,
+      "x": 8,
+      "y": 0
+     },
+     "links": {
+      "attendance_analytics-attendance-detail-2": "`attendance_analytics-attendance-detail`.`employee_name`"
+     },
+     "type": "filter"
+    },
+    {
+     "filter_name": "Location",
+     "filter_type": "String",
+     "icon": "map-pin",
+     "layout": {
+      "h": 1,
+      "i": "f-loc",
+      "w": 4,
+      "x": 12,
+      "y": 0
+     },
+     "links": {
+      "attendance_analytics-attendance-detail-2": "`attendance_analytics-attendance-detail`.`location`"
+     },
+     "type": "filter"
+    },
+    {
+     "chart": "attendance_analytics-total-records",
+     "layout": {
+      "h": 3,
+      "i": "c-kpi",
+      "w": 5,
+      "x": 0,
+      "y": 1
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "attendance_analytics-status-mix",
+     "layout": {
+      "h": 8,
+      "i": "c-donut",
+      "w": 7,
+      "x": 5,
+      "y": 1
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "attendance_analytics-by-company",
+     "layout": {
+      "h": 8,
+      "i": "c-bar",
+      "w": 8,
+      "x": 12,
+      "y": 1
+     },
+     "type": "chart"
+    },
+    {
+     "chart": "attendance_analytics-attendance-detail-2",
+     "layout": {
+      "h": 10,
+      "i": "c-tbl",
+      "w": 20,
+      "x": 0,
+      "y": 9
+     },
+     "type": "chart"
+    }
+   ],
+   "name": "attendance_analytics-attendance-analytics",
+   "title": "Attendance Analytics",
+   "vertical_compact_layout": 1,
+   "visible_to_roles": [
+    {
+     "role": "Desk User"
+    }
+   ],
+   "workbook": "attendance_analytics"
+  }
+ },
+ "docstatus": 0,
+ "doctype": "Insights Workbook",
+ "folders": [],
+ "idx": 0,
+ "is_standard": 1,
+ "modified": "2026-11-22 14:27:15.113326",
+ "modified_by": "Administrator",
+ "module": "HR Customizations",
+ "name": "attendance_analytics",
+ "owner": "Administrator",
+ "queries": {
+  "attendance_analytics-attendance-detail": {
+   "folder": null,
+   "is_builder_query": 0,
+   "is_native_query": 1,
+   "is_script_query": 0,
+   "name": "attendance_analytics-attendance-detail",
+   "operations": [
+    {
+     "data_source": "Site DB",
+     "raw_sql": "SELECT\n\ta.name AS attendance,\n\ta.employee,\n\ta.employee_name,\n\ta.company,\n\ta.status,\n\ta.attendance_date,\n\ta.docstatus,\n\ta.custom_employment_type_location AS location,\n\te.department\nFROM `tabAttendance` a\nLEFT JOIN `tabEmployee` e ON e.name = a.employee\nWHERE a.docstatus < 2\nORDER BY a.attendance_date DESC",
+     "type": "sql"
+    }
+   ],
+   "sort_order": 2,
+   "title": "Attendance Detail",
+   "use_live_connection": 1,
+   "workbook": "attendance_analytics"
+  },
+  "attendance_analytics-company-counts": {
+   "folder": null,
+   "is_builder_query": 0,
+   "is_native_query": 1,
+   "is_script_query": 0,
+   "name": "attendance_analytics-company-counts",
+   "operations": [
+    {
+     "data_source": "Site DB",
+     "raw_sql": "SELECT\n\tIFNULL(company, '') AS company,\n\tCOUNT(*) AS attendance_count\nFROM `tabAttendance`\nWHERE docstatus < 2\nGROUP BY company\nORDER BY attendance_count DESC",
+     "type": "sql"
+    }
+   ],
+   "sort_order": 1,
+   "title": "Company Counts",
+   "use_live_connection": 1,
+   "workbook": "attendance_analytics"
+  },
+  "attendance_analytics-status-counts": {
+   "folder": null,
+   "is_builder_query": 0,
+   "is_native_query": 1,
+   "is_script_query": 0,
+   "name": "attendance_analytics-status-counts",
+   "operations": [
+    {
+     "data_source": "Site DB",
+     "raw_sql": "SELECT\n\tstatus,\n\tCOUNT(*) AS attendance_count\nFROM `tabAttendance`\nWHERE docstatus < 2\nGROUP BY status\nORDER BY attendance_count DESC",
+     "type": "sql"
+    }
+   ],
+   "sort_order": 0,
+   "title": "Status Counts",
+   "use_live_connection": 1,
+   "workbook": "attendance_analytics"
+  }
+ },
+ "title": "Attendance Analytics"
+}

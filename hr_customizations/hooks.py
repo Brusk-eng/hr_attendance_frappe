@@ -196,9 +196,9 @@ after_install = "hr_customizations.setup.after_install"
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "hr_customizations.task.get_dashboard_data"
-# }
+override_doctype_dashboards = {
+	"Attendance": "hr_customizations.overrides.attendance_dashboard.get_dashboard_data",
+}
 
 # exempt linked doctypes from being automatically cancelled
 #
@@ -263,4 +263,8 @@ after_install = "hr_customizations.setup.after_install"
 # ignore_translatable_strings_from = []
 
 
-after_migrate = ["hr_customizations.setup.after_migrate"]
+after_migrate = [
+	"hr_customizations.setup.after_migrate",
+	"hr_customizations.desk_setup.after_migrate",
+	"hr_customizations.insights_workbook_builders.after_migrate",
+]
