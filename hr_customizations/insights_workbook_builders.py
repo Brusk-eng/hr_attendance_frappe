@@ -36,14 +36,28 @@ def _filter_links(query_name: str, field: str, chart_names: list[str]) -> dict:
 	return {chart: f"`{query_name}`.`{field}`" for chart in chart_names}
 
 
-def _delete_by_title(title: str):
+def _delete_workbook(name: str) -> bool:
+	"""Delete workbook when editable; return False if standard / locked on production."""
+	if not frappe.db.exists("Insights Workbook", name):
+		return True
+	try:
+		frappe.delete_doc("Insights Workbook", name, force=True, ignore_permissions=True)
+		return True
+	except frappe.ValidationError:
+		# Insights standard docs are not trashable outside developer mode.
+		return False
+
+
+def _delete_by_title(title: str) -> bool:
+	ok = True
 	for name in frappe.get_all("Insights Workbook", filters={"title": title}, pluck="name"):
-		frappe.delete_doc("Insights Workbook", name, force=True, ignore_permissions=True)
+		if not _delete_workbook(name):
+			ok = False
+	return ok
 
 
-def _delete_by_name(name: str):
-	if frappe.db.exists("Insights Workbook", name):
-		frappe.delete_doc("Insights Workbook", name, force=True, ignore_permissions=True)
+def _delete_by_name(name: str) -> bool:
+	return _delete_workbook(name)
 
 
 def _create_query(workbook: str, title: str, sql: str, sort_order: int) -> str:
@@ -145,8 +159,22 @@ ORDER BY a.attendance_date DESC
 
 def build_attendance_analytics() -> dict:
 	title = "Attendance Analytics"
-	_delete_by_title(title)
-	_delete_by_name("attendance_analytics")
+	# On production, shipped standard workbook cannot be deleted/rebuilt.
+	if frappe.db.exists("Insights Workbook", "attendance_analytics"):
+		if not frappe.conf.developer_mode:
+			return {
+				"workbook": "attendance_analytics",
+				"title": title,
+				"dashboard": "attendance_analytics",
+				"skipped": "standard workbook already present",
+			}
+	if not _delete_by_title(title) or not _delete_by_name("attendance_analytics"):
+		return {
+			"workbook": "attendance_analytics",
+			"title": title,
+			"dashboard": "attendance_analytics",
+			"skipped": "could not replace locked standard workbook",
+		}
 
 	workbook = frappe.get_doc({"doctype": "Insights Workbook", "title": title}).insert(
 		ignore_permissions=True

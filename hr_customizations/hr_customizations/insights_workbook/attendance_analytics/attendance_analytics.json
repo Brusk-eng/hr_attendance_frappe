@@ -177,7 +177,7 @@
    "workbook": "attendance_analytics"
   }
  },
- "creation": "2026-11-22 14:27:07.427523",
+ "creation": "2026-11-22 14:34:23.807527",
  "dashboards": {
   "attendance_analytics-attendance-analytics": {
    "items": [
@@ -309,7 +309,7 @@
  "folders": [],
  "idx": 0,
  "is_standard": 1,
- "modified": "2026-11-22 14:27:15.113326",
+ "modified": "2026-11-22 14:34:31.360290",
  "modified_by": "Administrator",
  "module": "HR Customizations",
  "name": "attendance_analytics",

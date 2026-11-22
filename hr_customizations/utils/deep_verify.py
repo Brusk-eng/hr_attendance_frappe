@@ -52,10 +52,13 @@ def run() -> dict:
 		_fail(f"page overlap {len(overlap)}")
 	else:
 		_ok("phone pages disjoint")
-	if not p1.get("has_more") and p1["total"] > 25:
-		_fail("has_more false")
+	if p1["total"] > 25:
+		if not p1.get("has_more"):
+			_fail("has_more false when total>25")
+		else:
+			_ok("has_more true when total>25")
 	else:
-		_ok("has_more true when total>25")
+		_ok(f"has_more={p1.get('has_more')} (total={p1['total']} ≤25)")
 
 	# Bulk mark 2 + cleanup
 	um = get_unmarked_employees(today(), company=company)
